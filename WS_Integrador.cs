@@ -603,7 +603,7 @@ namespace WS_itec2
         //{
         //    base.CanPauseAndContinue = true;
         //    base.ServiceName = "WS-Itec2";
-        //}
+        //}f
 
         public Service1()
         {
@@ -1451,13 +1451,16 @@ namespace WS_itec2
 
                 //string sqlQuery = "";
                 int stLinea = 0;
+                int ContadorProductos = 1;
 
                 string Datos = "";
                 string Resultado = "";
                 string SeparadorCampo = "¬"; //alt 170
                 string SeparadorLinea = "«"; //alt 174
 
-                #region Declaracion Variables de Texto
+                int CantidadRegistrosInsercion = int.Parse(ConfigurationManager.AppSettings["CantidadRegistrosInsercion"].ToString());
+
+                #region Declaracion Variables de Textos
                 string stTexto1 = "";
                 string stTexto2 = "";
                 string stTexto3 = "";
@@ -1494,16 +1497,14 @@ namespace WS_itec2
                 string stdecripArt = "";
                 #endregion
 
-                stTexto1 = "INT-ARTICULOS";
-
-                result = WS_Integrador.Classes.model.InfF_Generador.ValEjecutaProceso(stTexto1);
+                result = WS_Integrador.Classes.model.InfF_Generador.ValEjecutaProceso("INT-ARTICULOS");
                 if (result == "0")
                 {
                     LogInfo("BSALE_ExtraeMaestraArticulos", "No es hora de ejecutar, sale del proceso");
                     return false;
                 }
 
-                LogInfo("BSALE_ExtraeMaestraArticulos", "Es hora de descagar los productos (" + DateTime.Now.Hour.ToString().Trim() + " hrs), continua ejecucion del proceso >>>");
+                LogInfo("BSALE_ExtraeMaestraArticulos", "Es hora de descargar maestro de productos (" + DateTime.Now.Hour.ToString().Trim() + " hrs), continua ejecucion del proceso >>>");
 
                 string url = "https://api.bsale.cl/v1/products.json?&expand=[variants,pack_details,attribute_values,attributes,product_type]&state=0";
                 string token = ConfigurationManager.AppSettings["TokenBsale"].ToString();   //"4ea9ab77ab57a01ecc18e4591b9efe68c4d461e5";
@@ -1548,7 +1549,7 @@ namespace WS_itec2
                 //var total = 0;
                 //var k = 1;
 
-                LogInfo("BSALE_ExtraeMaestraArticulos", "Count Elementos: " + Count.ToString());
+                LogInfo("BSALE_ExtraeMaestraArticulos", "Total de Elementos: " + Count.ToString());
 
                 //Ciclo que recorre cantidad de paginas de datos leidos -----
                 for (Int32 w = 0; w < veces; w++)
@@ -1558,721 +1559,756 @@ namespace WS_itec2
                         s = EjecutaAPI_BSale(url, token, offset, "BSALE_ExtraeMaestraArticulos");
 
                         //Func.log(s);
-                        json = JsonConvert.DeserializeObject(s);
-                        rss = JObject.Parse(s);
+
+                        if (s.Trim() != "")
+                        {
+                            json = JsonConvert.DeserializeObject(s);
+                            rss = JObject.Parse(s);
+                        }
                     }
 
-                    //Ciclo que recorre la pagina de Articulos -----
-                    for (Int32 i = 0; i < rss["items"].Count(); i++)
+                    //----------------------------------------------------------------------------------------------------------------------------------------------
+                    //Si la ultima lectura a BSALE retornó datos sigue procesando, sino hace una PAUSA de 10 segundos a la espera que el servicio de BSale responda
+                    //----------------------------------------------------------------------------------------------------------------------------------------------
+                    if (s.Trim() != "")
                     {
-                        try
+                        //Ciclo que recorre la pagina de Articulos -----
+                        for (Int32 i = 0; i < rss["items"].Count(); i++)
                         {
-                            if (rss["items"][i]["state"].ToString() == "0")
+                            ContadorProductos = ContadorProductos + 1; //contador de productos padre leidos (no las variedades)
+
+                            LogInfo("BSALE_ExtraeMaestraArticulos", "Procesando posicion: " + ContadorProductos.ToString() + " (offset:" + offset.ToString() + ", limit:" + limit.ToString() + ", item:" + i.ToString() + ")");
+
+                            try
                             {
-                                stTexto29 = "";
-                                stTexto1 = "INT-ARTICULOS";
-                                stTexto2 = stEmpId;
-                                stdecripArt = rss["items"][i]["name"].ToString().Replace("'", ""); //descrip
-                                                                                                   //stTexto4 = rss["items"][i]["name"].ToString().Replace("'", ""); //descrip
-                                                                                                   //stTexto5 = rss["items"][i]["name"].ToString().Replace("'", ""); //descrip
-                                                                                                   //stTexto6 = rss["items"][i]["name"].ToString().Replace("'", ""); //descrip
-                                stTexto7 = "UN";
-                                stTexto8 = rss["items"][i]["product_type"]["id"].ToString(); //lineaproducto
-                                stTexto9 = "1"; //tipomodelo
-                                stTexto10 = ""; //version
-                                stTexto11 = rss["items"][i]["product_type"]["name"].ToString(); //origen
-                                stTexto12 = ""; //rtacion
-                                stTexto13 = ""; //fabrica
-                                stTexto14 = ""; //marca
-
-                                if (rss["items"][i]["classification"].ToString() != "3")
+                                if (rss["items"][i]["state"].ToString() == "0") //Estado 0=Activo
                                 {
-                                    stTexto15 = "1"; //tipo 1:Articulo;2:Servicio;3:Kit
-                                }
-                                else if (rss["items"][i]["classification"].ToString() == "3")
-                                {
-                                    stTexto15 = "3"; //tipo 1:Articulo;2:Servicio;3:Kit
+                                    stTexto29 = "";
+                                    stTexto1 = "INT-ARTICULOS";
+                                    stTexto2 = stEmpId;
+                                    stdecripArt = rss["items"][i]["name"].ToString().Replace("'", ""); //descrip
+                                                                                                       //stTexto4 = rss["items"][i]["name"].ToString().Replace("'", ""); //descrip
+                                                                                                       //stTexto5 = rss["items"][i]["name"].ToString().Replace("'", ""); //descrip
+                                                                                                       //stTexto6 = rss["items"][i]["name"].ToString().Replace("'", ""); //descrip
+                                    stTexto7 = "UN";
+                                    stTexto8 = rss["items"][i]["product_type"]["id"].ToString(); //lineaproducto
+                                    stTexto9 = "1"; //tipomodelo
+                                    stTexto10 = ""; //version
+                                    stTexto11 = rss["items"][i]["product_type"]["name"].ToString(); //origen
+                                    stTexto12 = ""; //rtacion
+                                    stTexto13 = ""; //fabrica
+                                    stTexto14 = ""; //marca
 
-                                    variantKit = (Int32)rss["items"][i]["pack_details"].Count();
-
-                                    for (Int32 i_kit = 0; i_kit < variantKit; i_kit++)
+                                    if (rss["items"][i]["classification"].ToString() != "3") //No es tipo KIT
                                     {
-                                        stTexto30 = rss["items"][i]["pack_details"][i_kit]["quantity"].ToString();  //quantity pack
-                                        if (rss["items"][i]["pack_details"][i_kit]["multipleVariant"].ToString() == "0")
-                                        {
-                                            //pregunta si viene el campo variant en el detalle de pack_details, para controlar NullReferenceException -----
-                                            if (rss["items"][i]["pack_details"].Parent.ToString().Contains("variant") == true)
-                                            {
-                                                stTexto31 = rss["items"][i]["pack_details"][i_kit]["variant"]["id"].ToString(); // Id variante Pack
-                                            }
-                                            else
-                                            {
-                                                stTexto31 = "";
-                                            }
-                                        }
-                                        else
-                                        {
-                                            stTexto15 = "1"; //tipo 1:Articulo;2:Servicio;3:Kit
-                                        }
-
-                                        stTexto29 += stTexto30 + "#" + stTexto31 + ";";
+                                        stTexto15 = "1"; //tipo 1:Articulo;2:Servicio;3:Kit
                                     }
-                                }
-
-                                stTexto16 = "0"; //usa serie
-                                stTexto17 = "0";  //usa lote
-                                stTexto19 = ""; //dun
-                                stTexto20 = "01-01-2021"; //vigencia
-                                stTexto21 = "31-12-2050";
-
-                                stTexto22 = "UN";
-                                stTexto23 = "UN";
-                                stTexto24 = ""; //codigprov
-                                stTexto25 = ""; //bod
-                                stTexto26 = ""; //ubic
-
-                                stTexto27 = rss["items"][i]["id"].ToString(); //productid
-
-                                linea0 = linea;
-
-                                if (1 == 1) //VALIDAR ATRIBUTOS DEL ARTICULO
-                                {
-                                    string stDoc_Attribute = ConfigurationManager.AppSettings["BSALE_Attributes"].ToString();
-                                    Atribucount = (Int32)rss["items"][i]["product_type"]["attributes"]["count"];
-
-                                    if (Atribucount < 26)
+                                    else 
                                     {
-                                        for (Int32 i_atri = 0; i_atri < Atribucount; i_atri++)
+                                        if (rss["items"][i]["classification"].ToString() == "3") // si es tipo KIT
                                         {
-                                            idattribute = "";
-                                            nameattribute = rss["items"][i]["product_type"]["attributes"]["items"][i_atri]["name"].ToString();  //Nombre del Atruibuto
-                                            if (stDoc_Attribute.IndexOf("'" + nameattribute + "'") >= 0)
+                                            stTexto15 = "3"; //tipo 1:Articulo;2:Servicio;3:Kit
+
+                                            variantKit = (Int32)rss["items"][i]["pack_details"].Count();
+
+                                            //Recorre los componentes del Kit
+                                            for (Int32 i_kit = 0; i_kit < variantKit; i_kit++)
                                             {
-                                                idattribute = rss["items"][i]["product_type"]["attributes"]["items"][i_atri]["id"].ToString();  //Nombre del Atruibuto
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        idattribute = "";
-                                    }
+                                                stTexto30 = rss["items"][i]["pack_details"][i_kit]["quantity"].ToString();  //quantity pack
 
-                                    #region Myattributte - esta todo comentado
-                                    //else
-                                    //{
-
-                                    //    string urlattribute = "https://api.bsale.cl/v1/variants.json?productid=" + rss["items"][i]["id"].ToString();
-
-                                    //    s2 = EjecutaAPI_BSale(urlattribute, token, 0);
-                                    //    LogInfo("BSALE_ExtraeMaestraArticulos", "Despues de API " + Count.ToString());
-
-                                    //    dynamic jsonvariant = JsonConvert.DeserializeObject(s2);
-                                    //    JObject rssvariant = JObject.Parse(s2);
-
-                                    //    Countvariant = (Int32)rssvariant["count"];
-                                    //    limitvariant = (Int32)rssvariant["limit"];
-                                    //    offsetvariant = (Int32)rssvariant["offset"];
-
-                                    //    var vecesvariant = Math.Ceiling(Convert.ToDouble(variantcount) / limitvariant);
-
-                                    //    for (Int32 q = 0; q < vecesvariant; q++)
-                                    //    {
-                                    //        if (q > 0)
-                                    //        {
-                                    //            s2 = EjecutaAPI_BSale(urlvariant, token, offsetvariant);
-
-                                    //            //Func.log(s);
-                                    //            jsonvariant = JsonConvert.DeserializeObject(s2);
-                                    //            rssvariant = JObject.Parse(s2);
-
-                                    //        }
-                                    //        for (Int32 i_var = 0; i_var < rssvariant["items"].Count(); i_var++)
-                                    //        {
-                                    //            stTexto3 = rssvariant["items"][i_var]["code"].ToString().Replace(",", "").Replace("'", "");  //sku
-                                    //            stTexto28 = rssvariant["items"][i_var]["id"].ToString();  //variantid
-                                    //            stTexto18 = rssvariant["items"][i_var]["barCode"].ToString().Replace("'", "");  //barcode
-                                    //            stTexto4 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
-                                    //            stTexto5 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
-                                    //            stTexto6 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
-                                    //            stTexto30 = rssvariant["items"][i_var]["state"].ToString();
-                                    //            stTexto31 = rssvariant["items"][i_var]["description"].ToString();
-                                    //            //MessageBox.Show(linea);
-                                    //            stLinea = stLinea + 1;
-                                    //            sqlQuery = "Insert Into L_Integraciones (Archivo, UserName, FechaProceso, Linea, ";
-                                    //            sqlQuery += "Texto1 , Texto2 , Texto3 , Texto4 , Texto5 , Texto6 , Texto7 , Texto8 , Texto9 , Texto10,";
-                                    //            sqlQuery += "Texto11, Texto12, Texto13, Texto14, Texto15, Texto16, Texto17, Texto18, Texto19, Texto20,";
-                                    //            sqlQuery += "Texto21, Texto22, Texto23, Texto24, Texto25, Texto26, Texto27, Texto28, Texto29, Texto30,";
-                                    //            sqlQuery += "Texto31) values (";
-
-                                    //            sqlQuery += "'" + stArchivo.Trim() + "'";
-                                    //            sqlQuery += ",'" + stUserName.Trim() + "'";
-                                    //            sqlQuery += ",'" + stFechaProcesoInt + "'";
-                                    //            sqlQuery += ",'" + stLinea + "'";
-                                    //            sqlQuery += ",'" + stTexto1.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto2.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto3.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto4.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto5.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto6.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto7.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto8.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto9.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto10.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto11.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto12.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto13.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto14.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto15.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto16.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto17.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto18.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto19.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto20.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto21.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto22.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto23.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto24.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto25.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto26.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto27.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto28.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto29.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto30.Trim() + "'";
-                                    //            sqlQuery += ",'" + stTexto31.Trim() + "'";
-                                    //            sqlQuery += ")";
-
-                                    //            result = Tmpt_SolImportDespacho.InsertarRegistro_OleDb("", sqlQuery);
-                                    //        }
-                                    //        offsetvariant = offsetvariant + limitvariant;
-                                    //    }
-                                    //}
-
-                                    #endregion
-                                }
-
-                                variantcount = (Int32)rss["items"][i]["variants"]["count"];
-
-                                if (variantcount < 26)
-                                {
-                                    for (Int32 i_var = 0; i_var < variantcount; i_var++)
-                                    {
-                                        stTexto32 = "";
-                                        stTexto3 = rss["items"][i]["variants"]["items"][i_var]["code"].ToString().Replace(",", "").Replace("'", "");  //sku
-                                        stTexto28 = rss["items"][i]["variants"]["items"][i_var]["id"].ToString();  //variantid
-                                        stTexto18 = rss["items"][i]["variants"]["items"][i_var]["barCode"].ToString().Replace("'", "");  //barcode
-                                        stTexto4 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
-                                        stTexto5 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
-                                        stTexto6 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
-                                        stTexto30 = rss["items"][i]["variants"]["items"][i_var]["state"].ToString();
-                                        stTexto31 = rss["items"][i]["variants"]["items"][i_var]["description"].ToString();
-
-                                        #region Myattribute_values
-
-                                        if (idattribute != "")
-                                        {
-                                            try
-                                            {
-                                                //llamado api variante BSale, se hace Control de error bad gateway desde BSale, se hacen 3 intentos de llamada ----
-                                                for (Int32 intentos_variante = 1; intentos_variante <= 3; intentos_variante++)
+                                                if (rss["items"][i]["pack_details"][i_kit]["multipleVariant"].ToString() == "0")
                                                 {
-                                                    s3 = EjecutaAPI_BSale(rss["items"][i]["variants"]["items"][i_var]["attribute_values"]["href"].ToString(), token, 0, "BSALE_ExtraeMaestraArticulos");
-
-                                                    //Si la respuesta es un json y no un html
-                                                    if (s3.Contains("attribute_values.json") == true &&
-                                                        s3.Contains("{") == true &&
-                                                        s3.Contains("<html>") == false &&
-                                                        s3.Contains("502 Bad Gateway") == false)
+                                                    //pregunta si viene el campo variant en el detalle de pack_details, para controlar NullReferenceException -----
+                                                    if (rss["items"][i]["pack_details"].Parent.ToString().Contains("variant") == true)
                                                     {
-                                                        //LogInfo("BSALE_ExtraeMaestraArticulos", "(A)Respuesta S3: " + s3);
-
-                                                        dynamic jsonattributeV = JsonConvert.DeserializeObject(s3);
-                                                        JObject rssattributeV = JObject.Parse(s3);
-
-                                                        CountattributeV = (Int32)rssattributeV["count"];
-                                                        limitattributeV = (Int32)rssattributeV["limit"];
-                                                        offsetattributeV = (Int32)rssattributeV["offset"];
-
-                                                        var vecesattributeV = Math.Ceiling(Convert.ToDouble(CountattributeV) / Convert.ToDouble(limitattributeV));
-
-                                                        for (Int32 wv = 0; wv < vecesattributeV; wv++)
-                                                        {
-                                                            if (wv > 0)
-                                                            {
-                                                                s3 = EjecutaAPI_BSale(url, token, offset, "BSALE_ExtraeMaestraArticulos");
-
-                                                                //Func.log(s);
-                                                                jsonattributeV = JsonConvert.DeserializeObject(s3);
-                                                                rssattributeV = JObject.Parse(s3);
-                                                            }
-
-                                                            for (Int32 iv = 0; iv < rssattributeV["items"].Count(); iv++)
-                                                            {
-                                                                if (idattribute == rssattributeV["items"][iv]["attribute"]["id"].ToString())
-                                                                {
-                                                                    stTexto32 = rssattributeV["items"][iv]["description"].ToString(); //atributo
-                                                                    break;
-                                                                }
-                                                            }
-
-                                                            offsetattributeV = offsetattributeV + limitattributeV;
-                                                        }
-
-                                                        break; //sale del for
+                                                        stTexto31 = rss["items"][i]["pack_details"][i_kit]["variant"]["id"].ToString(); // Id variante Pack
                                                     }
                                                     else
                                                     {
-                                                        LogInfo("BSALE_ExtraeMaestraArticulos", "Error llamado variante a BSALE. Intento: " + intentos_variante.ToString().Trim() +
-                                                                                                "Variante id: " + stTexto28.Trim() +
-                                                                                                ",variante descripcion:" + stTexto31.Trim() +
-                                                                                                ",Producto: " + stdecripArt.Trim() +
-                                                                                                ",producto id:" + stTexto27.Trim() +
-                                                                                                ",respuesta BSALE: " + s3.Trim());
+                                                        stTexto31 = "";
                                                     }
                                                 }
+                                                else
+                                                {
+                                                    stTexto15 = "1"; //tipo 1:Articulo;2:Servicio;3:Kit
+                                                }
 
+                                                //Concatena componentes del Kit -----------------------
+                                                stTexto29 += stTexto30 + "#" + stTexto31 + ";";
                                             }
-                                            catch (Exception error_)
-                                            {
-                                                LogInfo("BSALE_ExtraeMaestraArticulos", "Error(A):" + error_.Message +
-                                                                                        "Variante id: " + stTexto28.Trim() +
-                                                                                        ",variante descripcion:" + stTexto31.Trim() +
-                                                                                        ",Producto: " + stdecripArt.Trim() +
-                                                                                        ",producto id:" + stTexto27.Trim());
-                                            }
-
-                                            #region codigo comentariado
-                                            //dynamic jsonattributeV = JsonConvert.DeserializeObject(s3);
-                                            //JObject rssattributeV = JObject.Parse(s3);
-
-                                            //CountattributeV = (Int32)rssattributeV["count"];
-                                            //limitattributeV = (Int32)rssattributeV["limit"];
-                                            //offsetattributeV = (Int32)rssattributeV["offset"];
-
-                                            //var vecesattributeV = Math.Ceiling(Convert.ToDouble(CountattributeV) / Convert.ToDouble(limitattributeV));
-
-                                            //for (Int32 wv = 0; wv < vecesattributeV; wv++)
-                                            //{
-
-                                            //    if (wv > 0)
-                                            //    {
-                                            //        s3 = EjecutaAPI_BSale(url, token, offset);
-
-                                            //        //Func.log(s);
-                                            //        jsonattributeV = JsonConvert.DeserializeObject(s3);
-                                            //        rssattributeV = JObject.Parse(s3);
-
-                                            //    }
-                                            //    for (Int32 iv = 0; iv < rssattributeV["items"].Count(); iv++)
-                                            //    {
-                                            //        if (idattribute == rssattributeV["items"][iv]["attribute"]["id"].ToString())
-                                            //        {
-                                            //            stTexto32 = rssattributeV["items"][iv]["description"].ToString(); //atributo
-                                            //            break;
-                                            //        }
-
-                                            //    }
-                                            //    offsetattributeV = offsetattributeV + limitattributeV;
-
-                                            //}
-                                            #endregion
-                                        }
-                                        #endregion
-
-                                        //MessageBox.Show(linea);
-                                        stLinea = stLinea + 1;
-
-                                        #region Insert directo comentariado
-                                        //sqlQuery = "Insert Into L_Integraciones (Archivo, UserName, FechaProceso, Linea, ";
-                                        //sqlQuery += "Texto1 , Texto2 , Texto3 , Texto4 , Texto5 , Texto6 , Texto7 , Texto8 , Texto9 , Texto10,";
-                                        //sqlQuery += "Texto11, Texto12, Texto13, Texto14, Texto15, Texto16, Texto17, Texto18, Texto19, Texto20,";
-                                        //sqlQuery += "Texto21, Texto22, Texto23, Texto24, Texto25, Texto26, Texto27, Texto28, Texto29, Texto30,";
-                                        //sqlQuery += "Texto31, Texto32) values (";
-
-                                        //sqlQuery += "'" + stArchivo.Trim() + "'";
-                                        //sqlQuery += ",'" + stUserName.Trim() + "'";
-                                        //sqlQuery += ",'" + stFechaProcesoInt + "'";
-                                        //sqlQuery += ",'" + stLinea + "'";
-                                        //sqlQuery += ",'" + stTexto1.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto2.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto3.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto4.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto5.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto6.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto7.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto8.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto9.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto10.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto11.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto12.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto13.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto14.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto15.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto16.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto17.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto18.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto19.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto20.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto21.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto22.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto23.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto24.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto25.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto26.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto27.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto28.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto29.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto30.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto31.Trim() + "'";
-                                        //sqlQuery += ",'" + stTexto32.Trim() + "'";
-                                        //sqlQuery += ")";
-
-                                        //result = Tmpt_SolImportDespacho.InsertarRegistro_OleDb("", sqlQuery);
-                                        #endregion
-
-                                        //=========================================================================================================
-                                        //Si ya tiene lineas previas agrega caracter separador de Lineas
-                                        if (Datos.Trim() != "")
-                                        {
-                                            Datos = Datos.Trim() + SeparadorLinea.Trim();
-                                        }
-
-                                        //Envia Linea + Texto1 + ..... + Texto100
-                                        Datos = Datos.Trim() +
-                                                stLinea.ToString() + SeparadorCampo.Trim() +
-                                                stTexto1.Trim() + SeparadorCampo.Trim() +
-                                                stTexto2.Trim() + SeparadorCampo.Trim() +
-                                                stTexto3.Trim() + SeparadorCampo.Trim() +
-                                                stTexto4.Trim() + SeparadorCampo.Trim() +
-                                                stTexto5.Trim() + SeparadorCampo.Trim() +
-                                                stTexto6.Trim() + SeparadorCampo.Trim() +
-                                                stTexto7.Trim() + SeparadorCampo.Trim() +
-                                                stTexto8.Trim() + SeparadorCampo.Trim() +
-                                                stTexto9.Trim() + SeparadorCampo.Trim() +
-                                                stTexto10.Trim() + SeparadorCampo.Trim() +
-                                                stTexto11.Trim() + SeparadorCampo.Trim() +
-                                                stTexto12.Trim() + SeparadorCampo.Trim() +
-                                                stTexto13.Trim() + SeparadorCampo.Trim() +
-                                                stTexto14.Trim() + SeparadorCampo.Trim() +
-                                                stTexto15.Trim() + SeparadorCampo.Trim() +
-                                                stTexto16.Trim() + SeparadorCampo.Trim() +
-                                                stTexto17.Trim() + SeparadorCampo.Trim() +
-                                                stTexto18.Trim() + SeparadorCampo.Trim() +
-                                                stTexto19.Trim() + SeparadorCampo.Trim() +
-                                                stTexto20.Trim() + SeparadorCampo.Trim() +
-                                                stTexto21.Trim() + SeparadorCampo.Trim() +
-                                                stTexto22.Trim() + SeparadorCampo.Trim() +
-                                                stTexto23.Trim() + SeparadorCampo.Trim() +
-                                                stTexto24.Trim() + SeparadorCampo.Trim() +
-                                                stTexto25.Trim() + SeparadorCampo.Trim() +
-                                                stTexto26.Trim() + SeparadorCampo.Trim() +
-                                                stTexto27.Trim() + SeparadorCampo.Trim() +
-                                                stTexto28.Trim() + SeparadorCampo.Trim() +
-                                                stTexto29.Trim() + SeparadorCampo.Trim() +
-                                                stTexto30.Trim() + SeparadorCampo.Trim() +
-                                                stTexto31.Trim() + SeparadorCampo.Trim() +
-                                                stTexto32.Trim();
-
-                                        //Si salio del ciclo y quedaron Items por insertar en tabla de integracion --------------------------------
-                                        if (stLinea % 1000 == 0)
-                                        {
-                                            Resultado = Tmpt_SolImportDespacho.Inserta_Integraciones_Masivo(stArchivo,
-                                                                                                            stUserName.Trim(),
-                                                                                                            DateTime.Now,
-                                                                                                            Datos);
-                                            Datos = "";
                                         }
                                     }
-                                }
-                                else
-                                {
-                                    //llamado api producto BSale, se hace Control de error bad gateway desde BSale, se hacen 3 intentos de llamada ----
-                                    for (Int32 intentos_producto = 1; intentos_producto <= 3; intentos_producto++)
+
+                                    stTexto16 = "0"; //usa serie
+                                    stTexto17 = "0";  //usa lote
+                                    stTexto19 = ""; //dun
+                                    stTexto20 = "01-01-2021"; //vigencia
+                                    stTexto21 = "31-12-2050";
+
+                                    stTexto22 = "UN";
+                                    stTexto23 = "UN";
+                                    stTexto24 = ""; //codigprov
+                                    stTexto25 = ""; //bod
+                                    stTexto26 = ""; //ubic
+
+                                    stTexto27 = rss["items"][i]["id"].ToString(); //productid
+
+                                    linea0 = linea;
+
+                                    if (1 == 1) //VALIDAR ATRIBUTOS DEL ARTICULO
                                     {
-                                        string urlvariant = "https://api.bsale.cl/v1/variants.json?productid=" + rss["items"][i]["id"].ToString();
+                                        string stDoc_Attribute = ConfigurationManager.AppSettings["BSALE_Attributes"].ToString();
+                                        Atribucount = (Int32)rss["items"][i]["product_type"]["attributes"]["count"];
 
-                                        s2 = EjecutaAPI_BSale(urlvariant, token, 0, "BSALE_ExtraeMaestraArticulos");
-                                        //LogInfo("BSALE_ExtraeMaestraArticulos", "Despues de API " + Count.ToString());
-
-                                        //Si la respuesta es un json valido y no un html
-                                        if (s2.Contains("{") == true &&
-                                            s2.Contains("<html>") == false &&
-                                            s2.Contains("502 Bad Gateway") == false)
+                                        if (Atribucount < 26)
                                         {
-                                            dynamic jsonvariant = JsonConvert.DeserializeObject(s2);
-                                            JObject rssvariant = JObject.Parse(s2);
-
-                                            Countvariant = (Int32)rssvariant["count"];
-                                            limitvariant = (Int32)rssvariant["limit"];
-                                            offsetvariant = (Int32)rssvariant["offset"];
-
-                                            var vecesvariant = Math.Ceiling(Convert.ToDouble(variantcount) / limitvariant);
-
-                                            for (Int32 q = 0; q < vecesvariant; q++)
+                                            for (Int32 i_atri = 0; i_atri < Atribucount; i_atri++)
                                             {
-                                                if (q > 0)
+                                                idattribute = "";
+                                                nameattribute = rss["items"][i]["product_type"]["attributes"]["items"][i_atri]["name"].ToString();  //Nombre del Atributo
+                                                if (stDoc_Attribute.IndexOf("'" + nameattribute + "'") >= 0)
                                                 {
-                                                    s2 = EjecutaAPI_BSale(urlvariant, token, offsetvariant, "BSALE_ExtraeMaestraArticulos");
-
-                                                    //Func.log(s);
-                                                    jsonvariant = JsonConvert.DeserializeObject(s2);
-                                                    rssvariant = JObject.Parse(s2);
+                                                    idattribute = rss["items"][i]["product_type"]["attributes"]["items"][i_atri]["id"].ToString();  //Nombre del Atributo
+                                                    break;
                                                 }
-
-                                                for (Int32 i_var = 0; i_var < rssvariant["items"].Count(); i_var++)
-                                                {
-                                                    stTexto32 = "";
-                                                    stTexto3 = rssvariant["items"][i_var]["code"].ToString().Replace(",", "").Replace("'", "");  //sku
-                                                    stTexto28 = rssvariant["items"][i_var]["id"].ToString();  //variantid
-                                                    stTexto18 = rssvariant["items"][i_var]["barCode"].ToString().Replace("'", "");  //barcode
-                                                    stTexto4 = stdecripArt + " " + rssvariant["items"][i_var]["description"].ToString(); //descrip
-                                                    stTexto5 = stdecripArt + " " + rssvariant["items"][i_var]["description"].ToString(); //descrip
-                                                    stTexto6 = stdecripArt + " " + rssvariant["items"][i_var]["description"].ToString(); //descrip
-                                                    stTexto30 = rssvariant["items"][i_var]["state"].ToString();
-                                                    stTexto31 = rssvariant["items"][i_var]["description"].ToString();
-
-                                                    #region Myattribute_values
-
-                                                    try
-                                                    {
-                                                        //llamado api variante BSale, se hace Control de error bad gateway desde BSale, se hacen 3 intentos de llamada ----
-                                                        for (Int32 intentos_variante = 1; intentos_variante <= 3; intentos_variante++)
-                                                        {
-                                                            s3 = EjecutaAPI_BSale(rss["items"][i]["variants"]["items"][i_var]["attribute_values"]["href"].ToString(), token, 0, "BSALE_ExtraeMaestraArticulos");
-
-                                                            //Si la respuesta es un json y no un html
-                                                            if (s3.Contains("attribute_values.json") == true &&
-                                                                s3.Contains("{") == true &&
-                                                                s3.Contains("<html>") == false &&
-                                                                s3.Contains("502 Bad Gateway") == false)
-                                                            {
-                                                                //LogInfo("BSALE_ExtraeMaestraArticulos", "(B)Respuesta S3: " + s3);
-
-                                                                dynamic jsonattributeV = JsonConvert.DeserializeObject(s3);
-                                                                JObject rssattributeV = JObject.Parse(s3);
-
-                                                                CountattributeV = (Int32)rssattributeV["count"];
-                                                                limitattributeV = (Int32)rssattributeV["limit"];
-                                                                offsetattributeV = (Int32)rssattributeV["offset"];
-
-                                                                var vecesattributeV = Math.Ceiling(Convert.ToDouble(CountattributeV) / Convert.ToDouble(limitattributeV));
-
-                                                                for (Int32 wv = 0; wv < vecesattributeV; wv++)
-                                                                {
-
-                                                                    if (wv > 0)
-                                                                    {
-                                                                        s3 = EjecutaAPI_BSale(url, token, offset, "BSALE_ExtraeMaestraArticulos");
-
-                                                                        //Func.log(s);
-                                                                        jsonattributeV = JsonConvert.DeserializeObject(s3);
-                                                                        rssattributeV = JObject.Parse(s3);
-
-                                                                    }
-                                                                    for (Int32 iv = 0; iv < rssattributeV["items"].Count(); iv++)
-                                                                    {
-                                                                        if (idattribute == rssattributeV["items"][iv]["attribute"]["id"].ToString())
-                                                                        {
-                                                                            stTexto32 = rssattributeV["items"][iv]["description"].ToString(); //atributo
-                                                                            break;
-                                                                        }
-
-                                                                    }
-                                                                    offsetattributeV = offsetattributeV + limitattributeV;
-                                                                }
-
-                                                                break; //sale del ciclo 
-                                                            }
-                                                            else
-                                                            {
-                                                                LogInfo("BSALE_ExtraeMaestraArticulos", "Error llamado variante a BSALE. Intento: " + intentos_variante.ToString().Trim() +
-                                                                                                        "Variante id: " + stTexto28.Trim() +
-                                                                                                        ",variante descripcion:" + stTexto31.Trim() +
-                                                                                                        ",Producto: " + stdecripArt.Trim() +
-                                                                                                        ",producto id:" + stTexto27.Trim() +
-                                                                                                        ",respuesta BSALE: " + s3.Trim());
-                                                            }
-                                                        }
-                                                    }
-                                                    catch (Exception error_)
-                                                    {
-                                                        LogInfo("BSALE_ExtraeMaestraArticulos", "Error(B):" + error_.Message +
-                                                                                                "Variante id: " + stTexto28.Trim() +
-                                                                                                ",variante descripcion:" + stTexto31.Trim() +
-                                                                                                ",Producto: " + stdecripArt.Trim() +
-                                                                                                ",producto id:" + stTexto27.Trim());
-                                                    }
-
-                                                    #region codigo comentariado
-                                                    //dynamic jsonattributeV = JsonConvert.DeserializeObject(s3);
-                                                    //JObject rssattributeV = JObject.Parse(s3);
-
-                                                    //CountattributeV = (Int32)rssattributeV["count"];
-                                                    //limitattributeV = (Int32)rssattributeV["limit"];
-                                                    //offsetattributeV = (Int32)rssattributeV["offset"];
-
-                                                    //var vecesattributeV = Math.Ceiling(Convert.ToDouble(CountattributeV) / Convert.ToDouble(limitattributeV));
-
-                                                    //for (Int32 wv = 0; wv < vecesattributeV; wv++)
-                                                    //{
-
-                                                    //    if (wv > 0)
-                                                    //    {
-                                                    //        s3 = EjecutaAPI_BSale(url, token, offset);
-
-                                                    //        //Func.log(s);
-                                                    //        jsonattributeV = JsonConvert.DeserializeObject(s3);
-                                                    //        rssattributeV = JObject.Parse(s3);
-
-                                                    //    }
-                                                    //    for (Int32 iv = 0; iv < rssattributeV["items"].Count(); iv++)
-                                                    //    {
-                                                    //        if (idattribute == rssattributeV["items"][iv]["attribute"]["id"].ToString())
-                                                    //        {
-                                                    //            stTexto32 = rssattributeV["items"][iv]["description"].ToString(); //atributo
-                                                    //            break;
-                                                    //        }
-
-                                                    //    }
-                                                    //    offsetattributeV = offsetattributeV + limitattributeV;
-
-                                                    //}
-                                                    #endregion
-
-                                                    #endregion
-
-                                                    //MessageBox.Show(linea);
-                                                    stLinea = stLinea + 1;
-
-                                                    #region Insert directo comentariado
-                                                    //sqlQuery = "Insert Into L_Integraciones (Archivo, UserName, FechaProceso, Linea, ";
-                                                    //sqlQuery += "Texto1 , Texto2 , Texto3 , Texto4 , Texto5 , Texto6 , Texto7 , Texto8 , Texto9 , Texto10,";
-                                                    //sqlQuery += "Texto11, Texto12, Texto13, Texto14, Texto15, Texto16, Texto17, Texto18, Texto19, Texto20,";
-                                                    //sqlQuery += "Texto21, Texto22, Texto23, Texto24, Texto25, Texto26, Texto27, Texto28, Texto29, Texto30,";
-                                                    //sqlQuery += "Texto31, Texto32) values (";
-
-                                                    //sqlQuery += "'" + stArchivo.Trim() + "'";
-                                                    //sqlQuery += ",'" + stUserName.Trim() + "'";
-                                                    //sqlQuery += ",'" + stFechaProcesoInt + "'";
-                                                    //sqlQuery += ",'" + stLinea + "'";
-                                                    //sqlQuery += ",'" + stTexto1.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto2.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto3.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto4.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto5.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto6.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto7.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto8.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto9.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto10.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto11.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto12.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto13.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto14.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto15.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto16.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto17.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto18.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto19.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto20.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto21.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto22.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto23.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto24.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto25.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto26.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto27.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto28.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto29.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto30.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto31.Trim() + "'";
-                                                    //sqlQuery += ",'" + stTexto32.Trim() + "'";
-                                                    //sqlQuery += ")";
-
-                                                    //result = Tmpt_SolImportDespacho.InsertarRegistro_OleDb("", sqlQuery);
-                                                    #endregion
-
-                                                    //=========================================================================================================
-                                                    //Si ya tiene lineas previas agrega caracter separador de Lineas
-                                                    if (Datos.Trim() != "")
-                                                    {
-                                                        Datos = Datos.Trim() + SeparadorLinea.Trim();
-                                                    }
-
-                                                    //Envia Linea + Texto1 + ..... + Texto100
-                                                    Datos = Datos.Trim() +
-                                                            stLinea.ToString() + SeparadorCampo.Trim() +
-                                                            stTexto1.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto2.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto3.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto4.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto5.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto6.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto7.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto8.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto9.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto10.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto11.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto12.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto13.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto14.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto15.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto16.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto17.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto18.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto19.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto20.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto21.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto22.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto23.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto24.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto25.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto26.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto27.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto28.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto29.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto30.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto31.Trim() + SeparadorCampo.Trim() +
-                                                            stTexto32.Trim();
-
-                                                    //Si salio del ciclo y quedaron Items por insertar en tabla de integracion --------------------------------
-                                                    if (stLinea % 1000 == 0)
-                                                    {
-                                                        Resultado = Tmpt_SolImportDespacho.Inserta_Integraciones_Masivo(stArchivo,
-                                                                                                                        stUserName.Trim(),
-                                                                                                                        DateTime.Now,
-                                                                                                                        Datos);
-                                                        Datos = "";
-                                                    }
-                                                }
-
-                                                offsetvariant = offsetvariant + limitvariant;
                                             }
-
-                                            break; //sale del ciclo
                                         }
                                         else
                                         {
-                                            LogInfo("BSALE_ExtraeMaestraArticulos", "Error llamado producto a BSALE. Intento: " + intentos_producto.ToString().Trim() +
-                                                                                    ", Producto: " + stdecripArt.Trim() +
-                                                                                    ", Producto id: " + stTexto27.Trim() +
-                                                                                    ", Respuesta BSALE: " + s3.Trim());
+                                            idattribute = "";
+                                        }
+
+                                        #region Myattributte - esta todo comentado
+                                        //else
+                                        //{
+
+                                        //    string urlattribute = "https://api.bsale.cl/v1/variants.json?productid=" + rss["items"][i]["id"].ToString();
+
+                                        //    s2 = EjecutaAPI_BSale(urlattribute, token, 0);
+                                        //    LogInfo("BSALE_ExtraeMaestraArticulos", "Despues de API " + Count.ToString());
+
+                                        //    dynamic jsonvariant = JsonConvert.DeserializeObject(s2);
+                                        //    JObject rssvariant = JObject.Parse(s2);
+
+                                        //    Countvariant = (Int32)rssvariant["count"];
+                                        //    limitvariant = (Int32)rssvariant["limit"];
+                                        //    offsetvariant = (Int32)rssvariant["offset"];
+
+                                        //    var vecesvariant = Math.Ceiling(Convert.ToDouble(variantcount) / limitvariant);
+
+                                        //    for (Int32 q = 0; q < vecesvariant; q++)
+                                        //    {
+                                        //        if (q > 0)
+                                        //        {
+                                        //            s2 = EjecutaAPI_BSale(urlvariant, token, offsetvariant);
+
+                                        //            //Func.log(s);
+                                        //            jsonvariant = JsonConvert.DeserializeObject(s2);
+                                        //            rssvariant = JObject.Parse(s2);
+
+                                        //        }
+                                        //        for (Int32 i_var = 0; i_var < rssvariant["items"].Count(); i_var++)
+                                        //        {
+                                        //            stTexto3 = rssvariant["items"][i_var]["code"].ToString().Replace(",", "").Replace("'", "");  //sku
+                                        //            stTexto28 = rssvariant["items"][i_var]["id"].ToString();  //variantid
+                                        //            stTexto18 = rssvariant["items"][i_var]["barCode"].ToString().Replace("'", "");  //barcode
+                                        //            stTexto4 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
+                                        //            stTexto5 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
+                                        //            stTexto6 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
+                                        //            stTexto30 = rssvariant["items"][i_var]["state"].ToString();
+                                        //            stTexto31 = rssvariant["items"][i_var]["description"].ToString();
+                                        //            //MessageBox.Show(linea);
+                                        //            stLinea = stLinea + 1;
+                                        //            sqlQuery = "Insert Into L_Integraciones (Archivo, UserName, FechaProceso, Linea, ";
+                                        //            sqlQuery += "Texto1 , Texto2 , Texto3 , Texto4 , Texto5 , Texto6 , Texto7 , Texto8 , Texto9 , Texto10,";
+                                        //            sqlQuery += "Texto11, Texto12, Texto13, Texto14, Texto15, Texto16, Texto17, Texto18, Texto19, Texto20,";
+                                        //            sqlQuery += "Texto21, Texto22, Texto23, Texto24, Texto25, Texto26, Texto27, Texto28, Texto29, Texto30,";
+                                        //            sqlQuery += "Texto31) values (";
+
+                                        //            sqlQuery += "'" + stArchivo.Trim() + "'";
+                                        //            sqlQuery += ",'" + stUserName.Trim() + "'";
+                                        //            sqlQuery += ",'" + stFechaProcesoInt + "'";
+                                        //            sqlQuery += ",'" + stLinea + "'";
+                                        //            sqlQuery += ",'" + stTexto1.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto2.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto3.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto4.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto5.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto6.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto7.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto8.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto9.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto10.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto11.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto12.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto13.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto14.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto15.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto16.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto17.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto18.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto19.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto20.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto21.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto22.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto23.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto24.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto25.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto26.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto27.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto28.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto29.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto30.Trim() + "'";
+                                        //            sqlQuery += ",'" + stTexto31.Trim() + "'";
+                                        //            sqlQuery += ")";
+
+                                        //            result = Tmpt_SolImportDespacho.InsertarRegistro_OleDb("", sqlQuery);
+                                        //        }
+                                        //        offsetvariant = offsetvariant + limitvariant;
+                                        //    }
+                                        //}
+
+                                        #endregion
+                                    }
+
+                                    variantcount = (Int32)rss["items"][i]["variants"]["count"];
+
+                                    //Recorre Variantes (variedades) del producto (ej. producto Mouse optico, variantes negro, rojo, verde)
+                                    if (variantcount < 26) //si tiene menos de 25 variedades
+                                    {
+                                        for (Int32 i_var = 0; i_var < variantcount; i_var++)
+                                        {
+                                            stTexto32 = "";
+                                            stTexto3 = rss["items"][i]["variants"]["items"][i_var]["code"].ToString().Replace(",", "").Replace("'", "");  //sku
+                                            stTexto28 = rss["items"][i]["variants"]["items"][i_var]["id"].ToString();  //variantid
+                                            stTexto18 = rss["items"][i]["variants"]["items"][i_var]["barCode"].ToString().Replace("'", "");  //barcode
+                                            stTexto4 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
+                                            stTexto5 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
+                                            stTexto6 = stdecripArt + " " + rss["items"][i]["variants"]["items"][i_var]["description"].ToString(); //descrip
+                                            stTexto30 = rss["items"][i]["variants"]["items"][i_var]["state"].ToString();
+                                            stTexto31 = rss["items"][i]["variants"]["items"][i_var]["description"].ToString();
+
+                                            #region Myattribute_values
+
+                                            if (idattribute != "")
+                                            {
+                                                try
+                                                {
+                                                    //llamado api variante BSale, se hace Control de error bad gateway desde BSale, se hacen 3 intentos de llamada ----
+                                                    for (Int32 intentos_variante = 1; intentos_variante <= 3; intentos_variante++)
+                                                    {
+                                                        s3 = EjecutaAPI_BSale(rss["items"][i]["variants"]["items"][i_var]["attribute_values"]["href"].ToString(), token, 0, "BSALE_ExtraeMaestraArticulos");
+
+                                                        //Si la respuesta es un json y no un html
+                                                        if (s3.Contains("attribute_values.json") == true &&
+                                                            s3.Contains("{") == true &&
+                                                            s3.Contains("<html>") == false &&
+                                                            s3.Contains("502 Bad Gateway") == false)
+                                                        {
+                                                            //LogInfo("BSALE_ExtraeMaestraArticulos", "(A)Respuesta S3: " + s3);
+
+                                                            dynamic jsonattributeV = JsonConvert.DeserializeObject(s3);
+                                                            JObject rssattributeV = JObject.Parse(s3);
+
+                                                            CountattributeV = (Int32)rssattributeV["count"];
+                                                            limitattributeV = (Int32)rssattributeV["limit"];
+                                                            offsetattributeV = (Int32)rssattributeV["offset"];
+
+                                                            var vecesattributeV = Math.Ceiling(Convert.ToDouble(CountattributeV) / Convert.ToDouble(limitattributeV));
+
+                                                            for (Int32 wv = 0; wv < vecesattributeV; wv++)
+                                                            {
+                                                                if (wv > 0)
+                                                                {
+                                                                    s3 = EjecutaAPI_BSale(url, token, offset, "BSALE_ExtraeMaestraArticulos");
+
+                                                                    //Func.log(s);
+                                                                    jsonattributeV = JsonConvert.DeserializeObject(s3);
+                                                                    rssattributeV = JObject.Parse(s3);
+                                                                }
+
+                                                                for (Int32 iv = 0; iv < rssattributeV["items"].Count(); iv++)
+                                                                {
+                                                                    if (idattribute == rssattributeV["items"][iv]["attribute"]["id"].ToString())
+                                                                    {
+                                                                        stTexto32 = rssattributeV["items"][iv]["description"].ToString(); //atributo
+                                                                        break;
+                                                                    }
+                                                                }
+
+                                                                offsetattributeV = offsetattributeV + limitattributeV;
+                                                            }
+
+                                                            break; //sale del for
+                                                        }
+                                                        else
+                                                        {
+                                                            LogInfo("BSALE_ExtraeMaestraArticulos", "Error llamado variante a BSALE. Intento: " + intentos_variante.ToString().Trim() +
+                                                                                                    "Variante id: " + stTexto28.Trim() +
+                                                                                                    ",variante descripcion:" + stTexto31.Trim() +
+                                                                                                    ",Producto: " + stdecripArt.Trim() +
+                                                                                                    ",producto id:" + stTexto27.Trim() +
+                                                                                                    ",respuesta BSALE: " + s3.Trim());
+                                                        }
+                                                    }
+
+                                                }
+                                                catch (Exception error_)
+                                                {
+                                                    LogInfo("BSALE_ExtraeMaestraArticulos", "Error(A):" + error_.Message +
+                                                                                            "Variante id: " + stTexto28.Trim() +
+                                                                                            ",variante descripcion:" + stTexto31.Trim() +
+                                                                                            ",Producto: " + stdecripArt.Trim() +
+                                                                                            ",producto id:" + stTexto27.Trim());
+                                                }
+
+                                                #region codigo comentariado
+                                                //dynamic jsonattributeV = JsonConvert.DeserializeObject(s3);
+                                                //JObject rssattributeV = JObject.Parse(s3);
+
+                                                //CountattributeV = (Int32)rssattributeV["count"];
+                                                //limitattributeV = (Int32)rssattributeV["limit"];
+                                                //offsetattributeV = (Int32)rssattributeV["offset"];
+
+                                                //var vecesattributeV = Math.Ceiling(Convert.ToDouble(CountattributeV) / Convert.ToDouble(limitattributeV));
+
+                                                //for (Int32 wv = 0; wv < vecesattributeV; wv++)
+                                                //{
+
+                                                //    if (wv > 0)
+                                                //    {
+                                                //        s3 = EjecutaAPI_BSale(url, token, offset);
+
+                                                //        //Func.log(s);
+                                                //        jsonattributeV = JsonConvert.DeserializeObject(s3);
+                                                //        rssattributeV = JObject.Parse(s3);
+
+                                                //    }
+                                                //    for (Int32 iv = 0; iv < rssattributeV["items"].Count(); iv++)
+                                                //    {
+                                                //        if (idattribute == rssattributeV["items"][iv]["attribute"]["id"].ToString())
+                                                //        {
+                                                //            stTexto32 = rssattributeV["items"][iv]["description"].ToString(); //atributo
+                                                //            break;
+                                                //        }
+
+                                                //    }
+                                                //    offsetattributeV = offsetattributeV + limitattributeV;
+
+                                                //}
+                                                #endregion
+                                            }
+                                            #endregion
+
+                                            //MessageBox.Show(linea);
+                                            stLinea = stLinea + 1;
+
+                                            #region Insert directo comentariado
+                                            //sqlQuery = "Insert Into L_Integraciones (Archivo, UserName, FechaProceso, Linea, ";
+                                            //sqlQuery += "Texto1 , Texto2 , Texto3 , Texto4 , Texto5 , Texto6 , Texto7 , Texto8 , Texto9 , Texto10,";
+                                            //sqlQuery += "Texto11, Texto12, Texto13, Texto14, Texto15, Texto16, Texto17, Texto18, Texto19, Texto20,";
+                                            //sqlQuery += "Texto21, Texto22, Texto23, Texto24, Texto25, Texto26, Texto27, Texto28, Texto29, Texto30,";
+                                            //sqlQuery += "Texto31, Texto32) values (";
+
+                                            //sqlQuery += "'" + stArchivo.Trim() + "'";
+                                            //sqlQuery += ",'" + stUserName.Trim() + "'";
+                                            //sqlQuery += ",'" + stFechaProcesoInt + "'";
+                                            //sqlQuery += ",'" + stLinea + "'";
+                                            //sqlQuery += ",'" + stTexto1.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto2.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto3.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto4.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto5.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto6.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto7.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto8.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto9.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto10.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto11.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto12.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto13.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto14.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto15.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto16.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto17.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto18.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto19.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto20.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto21.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto22.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto23.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto24.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto25.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto26.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto27.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto28.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto29.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto30.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto31.Trim() + "'";
+                                            //sqlQuery += ",'" + stTexto32.Trim() + "'";
+                                            //sqlQuery += ")";
+
+                                            //result = Tmpt_SolImportDespacho.InsertarRegistro_OleDb("", sqlQuery);
+                                            #endregion
+
+                                            //=========================================================================================================
+                                            //Si ya tiene lineas previas agrega caracter separador de Lineas
+                                            if (Datos.Trim() != "")
+                                            {
+                                                Datos = Datos.Trim() + SeparadorLinea.Trim();
+                                            }
+
+                                            //Envia Linea + Texto1 + ..... + Texto100
+                                            Datos = Datos.Trim() +
+                                                    stLinea.ToString() + SeparadorCampo.Trim() +
+                                                    stTexto1.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto2.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto3.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto4.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto5.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto6.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto7.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto8.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto9.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto10.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto11.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto12.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto13.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto14.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto15.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto16.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto17.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto18.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto19.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto20.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto21.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto22.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto23.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto24.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto25.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto26.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto27.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto28.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto29.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto30.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto31.Trim() + SeparadorCampo.Trim() +
+                                                    stTexto32.Trim();
+
+                                            //Si salio del ciclo y quedaron Items por insertar en tabla de integracion --------------------------------
+                                            if (stLinea % CantidadRegistrosInsercion == 0)
+                                            {
+                                                LogInfo("BSALE_ExtraeMaestraArticulos", "Graba lineas (1). Corte linea: " + stLinea.ToString());
+
+                                                Resultado = Tmpt_SolImportDespacho.Inserta_Integraciones_Masivo(stArchivo,
+                                                                                                                stUserName.Trim(),
+                                                                                                                DateTime.Now,
+                                                                                                                Datos);
+                                                Datos = "";
+                                            }
+                                        }
+                                    }
+                                    else //si tiene mas de 25 variedades ejecuta api que trae lista de variedades
+                                    {
+                                        //llamado api producto BSale, se hace Control de error bad gateway desde BSale, se hacen 3 intentos de llamada ----
+                                        for (Int32 intentos_producto = 1; intentos_producto <= 3; intentos_producto++)
+                                        {
+                                            string urlvariant = "https://api.bsale.cl/v1/variants.json?productid=" + rss["items"][i]["id"].ToString();
+
+                                            s2 = EjecutaAPI_BSale(urlvariant, token, 0, "BSALE_ExtraeMaestraArticulos");
+                                            //LogInfo("BSALE_ExtraeMaestraArticulos", "Despues de API " + Count.ToString());
+
+                                            //Si la respuesta es un json valido y no un html
+                                            if (s2.Contains("{") == true &&
+                                                s2.Contains("<html>") == false &&
+                                                s2.Contains("502 Bad Gateway") == false)
+                                            {
+                                                dynamic jsonvariant = JsonConvert.DeserializeObject(s2);
+                                                JObject rssvariant = JObject.Parse(s2);
+
+                                                Countvariant = (Int32)rssvariant["count"];
+                                                limitvariant = (Int32)rssvariant["limit"];
+                                                offsetvariant = (Int32)rssvariant["offset"];
+
+                                                var vecesvariant = Math.Ceiling(Convert.ToDouble(variantcount) / limitvariant);
+
+                                                //Recorre variantes producto
+                                                for (Int32 q = 0; q < vecesvariant; q++)
+                                                {
+                                                    if (q > 0)
+                                                    {
+                                                        s2 = EjecutaAPI_BSale(urlvariant, token, offsetvariant, "BSALE_ExtraeMaestraArticulos");
+
+                                                        //Func.log(s);
+                                                        jsonvariant = JsonConvert.DeserializeObject(s2);
+                                                        rssvariant = JObject.Parse(s2);
+                                                    }
+
+                                                    for (Int32 i_var = 0; i_var < rssvariant["items"].Count(); i_var++)
+                                                    {
+                                                        stTexto32 = "";
+                                                        stTexto3 = rssvariant["items"][i_var]["code"].ToString().Replace(",", "").Replace("'", "");  //sku
+                                                        stTexto28 = rssvariant["items"][i_var]["id"].ToString();  //variantid
+                                                        stTexto18 = rssvariant["items"][i_var]["barCode"].ToString().Replace("'", "");  //barcode
+                                                        stTexto4 = stdecripArt + " " + rssvariant["items"][i_var]["description"].ToString(); //descrip
+                                                        stTexto5 = stdecripArt + " " + rssvariant["items"][i_var]["description"].ToString(); //descrip
+                                                        stTexto6 = stdecripArt + " " + rssvariant["items"][i_var]["description"].ToString(); //descrip
+                                                        stTexto30 = rssvariant["items"][i_var]["state"].ToString();
+                                                        stTexto31 = rssvariant["items"][i_var]["description"].ToString();
+
+                                                        #region Myattribute_values
+
+                                                        try
+                                                        {
+                                                            //llamado api variante BSale, se hace Control de error bad gateway desde BSale, se hacen 3 intentos de llamada ----
+                                                            for (Int32 intentos_variante = 1; intentos_variante <= 3; intentos_variante++)
+                                                            {
+                                                                s3 = EjecutaAPI_BSale(rss["items"][i]["variants"]["items"][i_var]["attribute_values"]["href"].ToString(), token, 0, "BSALE_ExtraeMaestraArticulos");
+
+                                                                //Si la respuesta es un json y no un html
+                                                                if (s3.Contains("attribute_values.json") == true &&
+                                                                    s3.Contains("{") == true &&
+                                                                    s3.Contains("<html>") == false &&
+                                                                    s3.Contains("502 Bad Gateway") == false)
+                                                                {
+                                                                    //LogInfo("BSALE_ExtraeMaestraArticulos", "(B)Respuesta S3: " + s3);
+
+                                                                    dynamic jsonattributeV = JsonConvert.DeserializeObject(s3);
+                                                                    JObject rssattributeV = JObject.Parse(s3);
+
+                                                                    CountattributeV = (Int32)rssattributeV["count"];
+                                                                    limitattributeV = (Int32)rssattributeV["limit"];
+                                                                    offsetattributeV = (Int32)rssattributeV["offset"];
+
+                                                                    var vecesattributeV = Math.Ceiling(Convert.ToDouble(CountattributeV) / Convert.ToDouble(limitattributeV));
+
+                                                                    for (Int32 wv = 0; wv < vecesattributeV; wv++)
+                                                                    {
+
+                                                                        if (wv > 0)
+                                                                        {
+                                                                            s3 = EjecutaAPI_BSale(url, token, offset, "BSALE_ExtraeMaestraArticulos");
+
+                                                                            //Func.log(s);
+                                                                            jsonattributeV = JsonConvert.DeserializeObject(s3);
+                                                                            rssattributeV = JObject.Parse(s3);
+
+                                                                        }
+                                                                        for (Int32 iv = 0; iv < rssattributeV["items"].Count(); iv++)
+                                                                        {
+                                                                            if (idattribute == rssattributeV["items"][iv]["attribute"]["id"].ToString())
+                                                                            {
+                                                                                stTexto32 = rssattributeV["items"][iv]["description"].ToString(); //atributo
+                                                                                break;
+                                                                            }
+
+                                                                        }
+                                                                        offsetattributeV = offsetattributeV + limitattributeV;
+                                                                    }
+
+                                                                    break; //sale del ciclo 
+                                                                }
+                                                                else
+                                                                {
+                                                                    LogInfo("BSALE_ExtraeMaestraArticulos", "Error llamado variante a BSALE. Intento: " + intentos_variante.ToString().Trim() +
+                                                                                                            "Variante id: " + stTexto28.Trim() +
+                                                                                                            ",variante descripcion:" + stTexto31.Trim() +
+                                                                                                            ",Producto: " + stdecripArt.Trim() +
+                                                                                                            ",producto id:" + stTexto27.Trim() +
+                                                                                                            ",respuesta BSALE: " + s3.Trim());
+                                                                }
+                                                            }
+                                                        }
+                                                        catch (Exception error_)
+                                                        {
+                                                            LogInfo("BSALE_ExtraeMaestraArticulos", "Error(B):" + error_.Message +
+                                                                                                    "Variante id: " + stTexto28.Trim() +
+                                                                                                    ",variante descripcion:" + stTexto31.Trim() +
+                                                                                                    ",Producto: " + stdecripArt.Trim() +
+                                                                                                    ",producto id:" + stTexto27.Trim());
+                                                        }
+
+                                                        #region codigo comentariado
+                                                        //dynamic jsonattributeV = JsonConvert.DeserializeObject(s3);
+                                                        //JObject rssattributeV = JObject.Parse(s3);
+
+                                                        //CountattributeV = (Int32)rssattributeV["count"];
+                                                        //limitattributeV = (Int32)rssattributeV["limit"];
+                                                        //offsetattributeV = (Int32)rssattributeV["offset"];
+
+                                                        //var vecesattributeV = Math.Ceiling(Convert.ToDouble(CountattributeV) / Convert.ToDouble(limitattributeV));
+
+                                                        //for (Int32 wv = 0; wv < vecesattributeV; wv++)
+                                                        //{
+
+                                                        //    if (wv > 0)
+                                                        //    {
+                                                        //        s3 = EjecutaAPI_BSale(url, token, offset);
+
+                                                        //        //Func.log(s);
+                                                        //        jsonattributeV = JsonConvert.DeserializeObject(s3);
+                                                        //        rssattributeV = JObject.Parse(s3);
+
+                                                        //    }
+                                                        //    for (Int32 iv = 0; iv < rssattributeV["items"].Count(); iv++)
+                                                        //    {
+                                                        //        if (idattribute == rssattributeV["items"][iv]["attribute"]["id"].ToString())
+                                                        //        {
+                                                        //            stTexto32 = rssattributeV["items"][iv]["description"].ToString(); //atributo
+                                                        //            break;
+                                                        //        }
+
+                                                        //    }
+                                                        //    offsetattributeV = offsetattributeV + limitattributeV;
+
+                                                        //}
+                                                        #endregion
+
+                                                        #endregion
+
+                                                        //MessageBox.Show(linea);
+                                                        stLinea = stLinea + 1;
+
+                                                        #region Insert directo comentariado
+                                                        //sqlQuery = "Insert Into L_Integraciones (Archivo, UserName, FechaProceso, Linea, ";
+                                                        //sqlQuery += "Texto1 , Texto2 , Texto3 , Texto4 , Texto5 , Texto6 , Texto7 , Texto8 , Texto9 , Texto10,";
+                                                        //sqlQuery += "Texto11, Texto12, Texto13, Texto14, Texto15, Texto16, Texto17, Texto18, Texto19, Texto20,";
+                                                        //sqlQuery += "Texto21, Texto22, Texto23, Texto24, Texto25, Texto26, Texto27, Texto28, Texto29, Texto30,";
+                                                        //sqlQuery += "Texto31, Texto32) values (";
+
+                                                        //sqlQuery += "'" + stArchivo.Trim() + "'";
+                                                        //sqlQuery += ",'" + stUserName.Trim() + "'";
+                                                        //sqlQuery += ",'" + stFechaProcesoInt + "'";
+                                                        //sqlQuery += ",'" + stLinea + "'";
+                                                        //sqlQuery += ",'" + stTexto1.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto2.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto3.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto4.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto5.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto6.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto7.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto8.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto9.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto10.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto11.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto12.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto13.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto14.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto15.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto16.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto17.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto18.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto19.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto20.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto21.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto22.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto23.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto24.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto25.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto26.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto27.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto28.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto29.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto30.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto31.Trim() + "'";
+                                                        //sqlQuery += ",'" + stTexto32.Trim() + "'";
+                                                        //sqlQuery += ")";
+
+                                                        //result = Tmpt_SolImportDespacho.InsertarRegistro_OleDb("", sqlQuery);
+                                                        #endregion
+
+                                                        //=========================================================================================================
+                                                        //Si ya tiene lineas previas agrega caracter separador de Lineas
+                                                        if (Datos.Trim() != "")
+                                                        {
+                                                            Datos = Datos.Trim() + SeparadorLinea.Trim();
+                                                        }
+
+                                                        //Envia Linea + Texto1 + ..... + Texto100
+                                                        Datos = Datos.Trim() +
+                                                                stLinea.ToString() + SeparadorCampo.Trim() +
+                                                                stTexto1.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto2.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto3.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto4.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto5.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto6.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto7.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto8.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto9.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto10.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto11.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto12.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto13.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto14.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto15.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto16.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto17.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto18.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto19.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto20.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto21.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto22.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto23.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto24.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto25.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto26.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto27.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto28.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto29.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto30.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto31.Trim() + SeparadorCampo.Trim() +
+                                                                stTexto32.Trim();
+
+                                                        //Si salio del ciclo y quedaron Items por insertar en tabla de integracion --------------------------------
+                                                        if (stLinea % CantidadRegistrosInsercion == 0)
+                                                        {
+                                                            LogInfo("BSALE_ExtraeMaestraArticulos", "Graba lineas (2). Corte linea: " + stLinea.ToString());
+
+                                                            Resultado = Tmpt_SolImportDespacho.Inserta_Integraciones_Masivo(stArchivo,
+                                                                                                                            stUserName.Trim(),
+                                                                                                                            DateTime.Now,
+                                                                                                                            Datos);
+                                                            Datos = "";
+                                                        }
+                                                    }
+
+                                                    offsetvariant = offsetvariant + limitvariant;
+                                                }
+
+                                                break; //sale del ciclo
+                                            }
+                                            else
+                                            {
+                                                LogInfo("BSALE_ExtraeMaestraArticulos", "Error llamado producto a BSALE. Intento: " + intentos_producto.ToString().Trim() +
+                                                                                        ", Producto: " + stdecripArt.Trim() +
+                                                                                        ", Producto id: " + stTexto27.Trim() +
+                                                                                        ", Respuesta BSALE: " + s3.Trim());
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        catch (Exception ex)
-                        {
-                            LogInfo("BSALE_ExtraeMaestraArticulos", "Item con error:" + i.ToString());
-                            LogInfo("BSALE_ExtraeMaestraArticulos", "Error:" + ex.Message, true);
-                        }
+                            catch (Exception ex)
+                            {
+                                LogInfo("BSALE_ExtraeMaestraArticulos", "Item con error:" + i.ToString());
+                                LogInfo("BSALE_ExtraeMaestraArticulos", "Error:" + ex.Message, true);
+                            }
 
-                    } //FIN Ciclo por los productos de cada pagina leida
+                        } //FIN Ciclo que recorre la pagina de Articulos -----
+
+                    } //FIN Si la ultima lectura a BSALE retornó datos sigue procesando
+                    else
+                    {
+                        LogInfo("BSALE_ExtraeMaestraArticulos", "Pausa de 3 segundos por error de BSale");
+                        System.Threading.Thread.Sleep(3000); // pausa de 3 segundos a la espera que el servicio de BSale responda en la siguiente lectura
+                        LogInfo("BSALE_ExtraeMaestraArticulos", "Fin Pausa de 3 segundos, continua");
+
+                        ContadorProductos = ContadorProductos + limit;
+                    }
 
                     offset = offset + limit;
 
-                } //FIN Ciclo por paginas de Articulos -----
+                } //FIN Ciclo que recorre cantidad de paginas de datos leidos -----
 
                 //Si salio del ciclo y quedaron Items por insertar en tabla de integracion --------------------------------
                 if (Datos != "")
@@ -3964,7 +4000,7 @@ namespace WS_itec2
                                         string token = ConfigurationManager.AppSettings["TokenBsale"].ToString();
                                         string urlvariant = "https://api.bsale.cl/v1/documents/" + PedidoDocumentosBSale.id.ToString() + "/details.json?B";
 
-                                        s2 = EjecutaAPI_BSale(urlvariant, token, 0);
+                                        s2 = EjecutaAPI_BSale(urlvariant, token, 0, "DescargaDoctosWebhook_BSALE");
 
                                         dynamic jsonvariant = JsonConvert.DeserializeObject(s2);
                                         JObject rssvariant = JObject.Parse(s2);
@@ -3979,7 +4015,7 @@ namespace WS_itec2
                                         {
                                             if (q > 0)
                                             {
-                                                s2 = EjecutaAPI_BSale(urlvariant, token, offsetvariant);
+                                                s2 = EjecutaAPI_BSale(urlvariant, token, offsetvariant, "DescargaDoctosWebhook_BSALE");
 
                                                 jsonvariant = JsonConvert.DeserializeObject(s2);
                                                 rssvariant = JObject.Parse(s2);
