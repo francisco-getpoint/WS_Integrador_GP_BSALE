@@ -538,6 +538,7 @@ namespace WS_itec2
             public int Estado { get; set; }
         }
 
+        [DataContract]
         public class ActualizaStockWoocomerceMasivo
         {
             [DataMember(Order = 1)]
@@ -545,6 +546,7 @@ namespace WS_itec2
             public List<Detalle_ActualizaStockWoocomerceMasivo> update = new List<Detalle_ActualizaStockWoocomerceMasivo>();
         }
 
+        [DataContract]
         public class Detalle_ActualizaStockWoocomerceMasivo
         {
             [DataMember(Order = 1)]
@@ -566,6 +568,8 @@ namespace WS_itec2
         //                }
         //            ]
         //}
+
+        [DataContract]
         public class ActualizaStockBigCommerce
         {
             [DataMember(Order = 1)]
@@ -576,6 +580,7 @@ namespace WS_itec2
             public List<Detalle_ActualizaStockBigCommerce> items = new List<Detalle_ActualizaStockBigCommerce>();
         }
 
+        [DataContract]
         public class Detalle_ActualizaStockBigCommerce
         {
             [DataMember(Order = 1)]
@@ -782,15 +787,13 @@ namespace WS_itec2
                 if (ConfigurationManager.AppSettings["Activa_ConfirmacionRecepcionINET"].ToString() == "True")
                 {
                     // 17 Servicio WEB integracion Confirmacion Recepcion INET - SIWMS_WSRecepcionConfirmacion
-
-                    //ConfirmacionRecepcionINET("CONFIRMACION_RECEPCION_INET");
-                    ConfirmacionRecepcionINET_RDM("CONFIRMACION_RECEPCION_INET");
+                    ConfirmacionRecepcionINET("CONFIRMACION_RECEPCION_INET");
                 }
 
                 if (ConfigurationManager.AppSettings["Activa_ConfirmacionDespachoINET"].ToString() == "True")
                 {
                     // 18 Servicio WEB integracion Confirmacion Despacho INET - SIWMS_WSRecepcionConfirmacion
-                    ConfirmacionRecepcionINET("CONFIRMACION_DESPACHO_INET");
+                    ConfirmacionDespachoINET("CONFIRMACION_DESPACHO_INET");
 
                     //especial para VIGAFLOW, se enviaran algunas confirmaciones por ruta de test 
                     //ConfirmacionRecepcionINET("CONFIRMACION_DESPACHO_TEST_INET");
@@ -4228,7 +4231,7 @@ namespace WS_itec2
         //Este mensaje depende de la configuracion para ocultar o no los mensajes de Log
         //Por defecto los mensajes se ocultaran cuando RegistroArchivoLog = "NO"
         //Si el mensaje se indica MostrarSiempre lo mostrara independiente lo que diga la Key RegistroArchivoLog 
-        public static void LogInfo(string sMessage, string motivo, bool MostrarSiempre = false)
+        public static void LogInfo(string sMessage, string motivo, bool MostrarSiempre = false, bool GuardarEnBD = false, string NombreProceso = "", string Referencia = "", string EstructuraJSON = "")
         {
             try
             {
@@ -4240,11 +4243,28 @@ namespace WS_itec2
                     StringBuilder html = new StringBuilder();
                     string FilePath = ConfigurationManager.AppSettings["PathLogITEC"].ToString() + "\\Log_Integrador_" + DateTime.Now.ToString("MMdd") + ".txt";
 
-                    html.Append("[" + sMessage.ToString() + "]. Fecha/Hora " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToLongTimeString() + ". " + motivo.Trim());
+                    //html.Append("[" + sMessage.ToString() + "]. Fecha/Hora " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToLongTimeString() + ". " + motivo.Trim());
+                    if (EstructuraJSON.Trim() != "")
+                    {
+                        html.Append("[" + sMessage.ToString() +
+                                    "]. Fecha/Hora " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString() + ". " +
+                                    motivo.Trim() + ". JSON= " + EstructuraJSON.Trim());
+                    }
+                    else
+                    {
+                        html.Append("[" + sMessage.ToString() + "]. Fecha/Hora " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString() + ". " + motivo.Trim());
+                    }
+
                     html.Append(Environment.NewLine);
                     StreamWriter strStreamWriter = File.AppendText(FilePath);
                     strStreamWriter.Write(html.ToString());
                     strStreamWriter.Close();
+
+                    //Si la key indica grabar log en la base de datos y el mensaje tambien =================
+                    if (ConfigurationManager.AppSettings["RegistroBDLog"].ToString() == "SI" && GuardarEnBD == true)
+                    {
+                        LogInfoBD(NombreProceso, motivo, Referencia, EstructuraJSON);
+                    }
                 }
             }
             catch (Exception e)
@@ -4252,6 +4272,27 @@ namespace WS_itec2
                 LogInfo(e.Message, "Creación de Log.");
             }
         }
+
+        //Graba log en base de datos, depende de la key RegistroBDLog, si esta en SI, guardará el mensaje en el log
+        #region Funcion LogInfoBD para grabar archivo de log en la Base de datos
+        public static void LogInfoBD(string NombreProceso, string Mensaje, string Referencia, string EstructuraJSON = "")
+        {
+            try
+            {
+                string result;
+
+                //Guarda registro en tabla L_LogAPI
+                result = WS_Integrador.Classes.model.InfF_Generador.GuardaLogEnBaseDatos(NombreProceso,
+                                                                                         Referencia,
+                                                                                         Mensaje,
+                                                                                         EstructuraJSON); //Procesado
+            }
+            catch (Exception e)
+            {
+                LogInfo(e.Message, "Creación de Log BD", true);
+            }
+        }
+        #endregion
 
         //public static void LogInfo(string sMessage, string motivo)
         //{
@@ -5839,6 +5880,10 @@ namespace WS_itec2
                             }
                         }
 
+                        //filtra pedidos creados entre la fecha de hoy y un dia antes
+                        request.AddParameter("created_on_from", DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd"));
+                        request.AddParameter("created_on_to", DateTime.Now.ToString("yyyy-MM-dd"));
+
                         //Carga variable body a enviar
                         var body = @"";
 
@@ -5856,21 +5901,23 @@ namespace WS_itec2
                             JObject rss = JObject.Parse(response.Content);
 
                             //Si llamado se realizó OK continúa -----
-                            if (rss["message"].ToString() == "OK")
+                            //if (rss["message"].ToString() == "OK") //******** RIPLEY ELIMINO EL CAMPO MESSAGE, SE PREGUNTO SOLO POR EL STATUS DE EJECUCION **********
+                            if (CodigoRetorno.Equals(HttpStatusCode.OK))
                             {
-                                total = (Int32)rss["data"]["total"];
-                                limit = (Int32)rss["data"]["limit"];
-                                offset = (Int32)rss["data"]["offset"];
+                                total = (Int32)rss["total"];
+                                limit = (Int32)rss["limit"];
+                                offset = (Int32)rss["offset"];
 
                                 //Calcula cuantas veces debe ejecutar la API para extraer los datos
                                 var ciclos = Math.Ceiling(Convert.ToDouble(total) / Convert.ToDouble(limit));
 
-                                for (Int32 c = 0; c < ciclos; c++)
+                                for (Int32 c = 1; c < ciclos; c++)
                                 {
                                     if (c > 0) //solo entra si hace mas de 1 llamado a la API
                                     {
                                         //Agrega offset al siguiente llamado ----- 
-                                        client = new RestClient(myData.Tables[0].Rows[p]["URL_EndPoint"].ToString().Trim() + @"&offset=" + offset.ToString());
+                                        //client = new RestClient(myData.Tables[0].Rows[p]["URL_EndPoint"].ToString().Trim() + @"&offset=" + offset.ToString());
+                                        client = new RestClient(myData.Tables[0].Rows[p]["URL_EndPoint"].ToString().Trim() + @"?page=" + c.ToString());
 
                                         //Ejecuta llamado de la API --------------
                                         response = client.Execute(request);
@@ -5879,254 +5926,206 @@ namespace WS_itec2
                                         rss = JObject.Parse(response.Content);
                                     }
 
-                                    //Recorre Ordenes obtenidas desde Ripley -------
-                                    for (Int32 i = 0; i < rss["data"]["orders"].Count(); i++)
+                                    if (rss["orders"].Count() > 0)
                                     {
-                                        //Valida si la Orden ya se ingresó a la tabla de integracion ==============================
-                                        DataSet dsExiste = WS_Integrador.Classes.model.InfF_Generador.Busca_Integracion_Existente(stUserName,
-                                                                                                                                  "INT-SOL-PEDIDO",
-                                                                                                                                  "OT",
-                                                                                                                                  rss["data"]["orders"][i]["order_id"].ToString());
-                                        DateTime Fecha;
-                                        int Existe;
-                                        Existe = 0; //No
-
-                                        if (dsExiste.Tables.Count > 0)
+                                        //Recorre Ordenes obtenidas desde Ripley -------
+                                        for (Int32 i = 0; i < rss["orders"].Count(); i++)
                                         {
-                                            if (dsExiste.Tables[0].Rows.Count > 0)
+                                            //Valida si la Orden ya se ingresó a la tabla de integracion ==============================
+                                            DataSet dsExiste = WS_Integrador.Classes.model.InfF_Generador.Busca_Integracion_Existente(stUserName,
+                                                                                                                                      "INT-SOL-PEDIDO",
+                                                                                                                                      "OT",
+                                                                                                                                      rss["orders"][i]["order_id"].ToString());
+                                            DateTime Fecha;
+                                            int Existe;
+                                            Existe = 0; //No
+
+                                            if (dsExiste.Tables.Count > 0)
                                             {
-                                                Existe = 1; //Si
-                                            }
-                                        }
-
-                                        //Si la referencia no existe en la tabla de integracion la procesa
-                                        if (Existe == 0)
-                                        {
-                                            stLinea = 0;
-
-                                            stArchivo = "ORDEN_RIPLEY_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + rss["data"]["orders"][i]["order_id"].ToString();
-                                            stFechaProceso = DateTime.Now.ToString("yyyyMMdd");
-
-                                            stTexto1 = "INT-SOL-PEDIDO"; //INT-NAME
-                                            stTexto2 = DateTime.Now.ToString("yyyyMMdd HHmmss"); //FECHAHORA
-                                            stTexto3 = "A"; //TIPO_TRK: Append
-                                            stTexto4 = ""; //Dato1 cabecera 
-                                            stTexto5 = rss["data"]["orders"][i]["_id"].ToString(); ; //Dato2 cabecera --> guardamos Id interno Solicitud Ripley
-                                            stTexto6 = EmpId.ToString(); //Empid
-                                            stTexto7 = DateTime.Now.ToString("yyyyMMdd"); //FechaDigitacion
-                                            stTexto8 = "INTEGRADOR_API"; //UsuarioDigitacion
-                                            stTexto9 = DateTime.Now.ToString("yyyyMMdd"); //FechaProceso
-                                            stTexto10 = "7"; //TipoSolicitud= Ripley
-                                            stTexto11 = ""; //Comprador
-                                            stTexto12 = ""; //RutCliente
-
-                                            //stTexto13 = rss["data"]["orders"][i]["customer"]["billing_address"]["company"].ToString(); //RazonSocial
-                                            stTexto13 = rss["data"]["orders"][i]["customer"]["billing_address"]["firstname"].ToString() + " " +
-                                                        rss["data"]["orders"][i]["customer"]["billing_address"]["lastname"].ToString();
-
-                                            stTexto14 = rss["data"]["orders"][i]["customer"]["billing_address"]["firstname"].ToString() + " " +
-                                                        rss["data"]["orders"][i]["customer"]["billing_address"]["lastname"].ToString(); //Contacto
-                                            stTexto15 = rss["data"]["orders"][i]["_vendor_id"].ToString(); //Vendedor
-
-                                            switch (rss["data"]["orders"][i]["customer"]["shipping_address"]["state"].ToString()) //Region 
-                                            {
-                                                case "I REGION":            stTexto16 = "1"; break;
-                                                case "II REGION":           stTexto16 = "2"; break;
-                                                case "III REGION":          stTexto16 = "3"; break;
-                                                case "IV REGION":           stTexto16 = "4"; break;
-                                                case "V REGION":            stTexto16 = "5"; break;
-                                                case "VI REGION":           stTexto16 = "6"; break;
-                                                case "VII REGION":          stTexto16 = "7"; break;
-                                                case "VIII REGION":         stTexto16 = "8"; break;
-                                                case "IX REGION":           stTexto16 = "9"; break;
-                                                case "X REGION":            stTexto16 = "10"; break;
-                                                case "XI REGION":           stTexto16 = "11"; break;
-                                                case "XII REGION":          stTexto16 = "12"; break;
-                                                case "XIV REGION":          stTexto16 = "14"; break;
-                                                case "XV REGION":           stTexto16 = "15"; break;
-                                                case "REG.METROPOLITANA":   stTexto16 = "13"; break;
-                                            }
-
-                                            stTexto17 = rss["data"]["orders"][i]["customer"]["billing_address"]["city"].ToString(); //Ciudad
-                                            stTexto18 = rss["data"]["orders"][i]["customer"]["billing_address"]["city"].ToString(); //Comuna
-                                            stTexto19 = rss["data"]["orders"][i]["customer"]["billing_address"]["street_1"].ToString(); //Direccion
-                                            stTexto20 = ""; //Email
-                                            stTexto21 = ""; //RutaDespId
-                                            stTexto22 = ""; //Moneda
-                                            stTexto23 = ""; //TipoDocumento
-                                            stTexto24 = ""; //NumeroDocumento
-                                            stTexto25 = ""; //FechaDocto
-                                            stTexto26 = "OT"; //TipoReferencia
-                                            stTexto27 = rss["data"]["orders"][i]["order_id"].ToString(); //NumeroReferencia
-
-                                            LogInfo("IntegraOrdenesRipley-Fecha", rss["data"]["orders"][i]["created_date"].ToString());
-                                            Fecha = DateTime.Parse(rss["data"]["orders"][i]["created_date"].ToString());
-                                            stTexto28 = Fecha.ToString("yyyyMMdd");
-
-                                            //stTexto28 = rss["data"]["orders"][i]["created_date"].ToString().Substring(0,10).Replace("-",""); //FechaReferencia
-
-                                            stTexto29 = ""; //PorcTolerancia
-                                            stTexto30 = "Interface Ripley, CREA ORDEN - " + rss["data"]["orders"][i]["shop_name"].ToString(); //Glosa
-                                            stTexto31 = ""; //Linea
-
-                                            //realiza ciclo por los items de la orden e inserta
-                                            for (Int32 item = 0; item < (Int32)rss["data"]["orders"][i]["order_lines"].Count(); item++)
-                                            {
-                                                stTexto32 = rss["data"]["orders"][i]["order_lines"][item]["offer_sku"].ToString(); //CodigoArticulo
-                                                stTexto33 = ""; //CodigoOriginal
-                                                stTexto34 = "UN"; //UnidadCompra
-                                                stTexto35 = rss["data"]["orders"][i]["order_lines"][item]["quantity"].ToString(); //Cantidad
-
-                                                //stTexto36 = rss["data"]["orders"][i]["order_lines"][item]["order_line_id"].ToString(); //ItemReferencia 
-                                                stTexto36 = rss["data"]["orders"][i]["order_lines"][item]["order_line_index"].ToString(); //ItemReferencia 
-
-                                                stTexto37 = ""; //Lote 
-                                                stTexto38 = ""; //Referencia
-                                                stTexto39 = ""; //Vencimiento
-                                                stTexto40 = "1"; //Estado
-
-                                                stLinea = stLinea + 1;
-
-                                                //inserta en tabla de integracion
-                                                WS_Integrador.Classes.model.InfF_Generador.Inserta_Integraciones(stArchivo,
-                                                                                                                 stUserName.Trim(),
-                                                                                                                 DateTime.Now, //stFechaProceso,
-                                                                                                                 stLinea,
-                                                                                                                 stTexto1.Trim(),
-                                                                                                                 stTexto2.Trim(),
-                                                                                                                 stTexto3.Trim(),
-                                                                                                                 stTexto4.Trim(),
-                                                                                                                 stTexto5.Trim(),
-                                                                                                                 stTexto6.Trim(),
-                                                                                                                 stTexto7.Trim(),
-                                                                                                                 stTexto8.Trim(),
-                                                                                                                 stTexto9.Trim(),
-                                                                                                                 stTexto10.Trim(),
-                                                                                                                 stTexto11.Trim(),
-                                                                                                                 stTexto12.Trim(),
-                                                                                                                 stTexto13.Trim(),
-                                                                                                                 stTexto14.Trim(),
-                                                                                                                 stTexto15.Trim(),
-                                                                                                                 stTexto16.Trim(),
-                                                                                                                 stTexto17.Trim(),
-                                                                                                                 stTexto18.Trim(),
-                                                                                                                 stTexto19.Trim(),
-                                                                                                                 stTexto20.Trim(),
-                                                                                                                 stTexto21.Trim(),
-                                                                                                                 stTexto22.Trim(),
-                                                                                                                 stTexto23.Trim(),
-                                                                                                                 stTexto24.Trim(),
-                                                                                                                 stTexto25.Trim(),
-                                                                                                                 stTexto26.Trim(),
-                                                                                                                 stTexto27.Trim(),
-                                                                                                                 stTexto28.Trim(),
-                                                                                                                 stTexto29.Trim(),
-                                                                                                                 stTexto30.Trim(),
-                                                                                                                 stTexto31.Trim(),
-                                                                                                                 stTexto32.Trim(),
-                                                                                                                 stTexto33.Trim(),
-                                                                                                                 stTexto34.Trim(),
-                                                                                                                 stTexto35.Trim(),
-                                                                                                                 stTexto36.Trim(),
-                                                                                                                 stTexto37.Trim(),
-                                                                                                                 stTexto38.Trim(),
-                                                                                                                 stTexto39.Trim(),
-                                                                                                                 stTexto40.Trim());
-                                                #region llamadoAntiguo
-                                                //llamadoAntiguo --------
-                                                //sqlQuery = "Insert Into L_Integraciones (Archivo, UserName, FechaProceso, Linea, ";
-                                                //sqlQuery += "Texto1 , Texto2 , Texto3 , Texto4 , Texto5 , Texto6 , Texto7 , Texto8 , Texto9 , Texto10,";
-                                                //sqlQuery += "Texto11, Texto12, Texto13, Texto14, Texto15, Texto16, Texto17, Texto18, Texto19, Texto20,";
-                                                //sqlQuery += "Texto21, Texto22, Texto23, Texto24, Texto25, Texto26, Texto27, Texto28, Texto29, Texto30,";
-                                                //sqlQuery += "Texto31, Texto32, Texto33, Texto34, Texto35, Texto36, Texto37, Texto38, Texto39, Texto40) values (";
-
-                                                //sqlQuery += "'" + stArchivo.Trim() + "'";
-                                                //sqlQuery += ",'" + stUserName.Trim() + "'";
-                                                //sqlQuery += ",'" + stFechaProceso + "'";
-                                                //sqlQuery += ",'" + stLinea + "'";
-                                                //sqlQuery += ",'" + stTexto1.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto2.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto3.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto4.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto5.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto6.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto7.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto8.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto9.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto10.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto11.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto12.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto13.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto14.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto15.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto16.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto17.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto18.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto19.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto20.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto21.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto22.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto23.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto24.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto25.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto26.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto27.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto28.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto29.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto30.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto31.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto32.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto33.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto34.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto35.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto36.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto37.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto38.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto39.Trim() + "'";
-                                                //sqlQuery += ",'" + stTexto40.Trim() + "'";
-                                                //sqlQuery += ")";
-                                                //result = Tmpt_SolImportDespacho.InsertarRegistro_OleDb("", sqlQuery);
-                                                #endregion
-                                            }
-
-                                            //Termina de recorrer los items de la orden, procesa la linea ------
-                                            DataSet myDataSet1 = new DataSet();
-                                            string resultIntegracion = "0";
-
-                                            LogInfo("IntegraOrdenesRipley", "Llamado GeneraProceso: " + stArchivo.Trim());
-
-                                            myDataSet1 = Tmpt_SolImportDespacho.GeneraProceso(stArchivo,
-                                                                                              stUserName,
-                                                                                              new DateTime(DateTime.Now.Year,
-                                                                                                           DateTime.Now.Month,
-                                                                                                           DateTime.Now.Day));
-                                            if (myDataSet1.Tables.Count > 0)
-                                            {
-                                                int tabla1 = myDataSet1.Tables.Count;
-                                                resultIntegracion = myDataSet1.Tables[tabla1 - 1].Rows[0]["Generacion"].ToString().Trim();
-
-                                                if (resultIntegracion != "0")
+                                                if (dsExiste.Tables[0].Rows.Count > 0)
                                                 {
-                                                    LogInfo("IntegraOrdenesRipley", "Orden de Ripley integrada correctamente, " + 
-                                                                                    "Id Orden: " + stTexto27.Trim() +
-                                                                                    ", SDD generada: " + myDataSet1.Tables[0].Rows[0]["Generacion"].ToString().Trim());
-                                                                                                                             
+                                                    Existe = 1; //Si
+                                                }
+                                            }
+
+                                            //Si la referencia no existe en la tabla de integracion la procesa
+                                            if (Existe == 0)
+                                            {
+                                                stLinea = 0;
+
+                                                stArchivo = "ORDEN_RIPLEY_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + rss["orders"][i]["order_id"].ToString();
+                                                stFechaProceso = DateTime.Now.ToString("yyyyMMdd");
+
+                                                stTexto1 = "INT-SOL-PEDIDO"; //INT-NAME
+                                                stTexto2 = DateTime.Now.ToString("yyyyMMdd HHmmss"); //FECHAHORA
+                                                stTexto3 = "A"; //TIPO_TRK: Append
+                                                stTexto4 = ""; //Dato1 cabecera 
+                                                stTexto5 = rss["orders"][i]["_id"].ToString(); ; //Dato2 cabecera --> guardamos Id interno Solicitud Ripley
+                                                stTexto6 = EmpId.ToString(); //Empid
+                                                stTexto7 = DateTime.Now.ToString("yyyyMMdd"); //FechaDigitacion
+                                                stTexto8 = "INTEGRADOR_API"; //UsuarioDigitacion
+                                                stTexto9 = DateTime.Now.ToString("yyyyMMdd"); //FechaProceso
+                                                stTexto10 = "7"; //TipoSolicitud= Ripley
+                                                stTexto11 = ""; //Comprador
+                                                stTexto12 = ""; //RutCliente
+
+                                                //stTexto13 = rss["orders"][i]["customer"]["billing_address"]["company"].ToString(); //RazonSocial
+                                                stTexto13 = rss["orders"][i]["customer"]["billing_address"]["firstname"].ToString() + " " +
+                                                            rss["orders"][i]["customer"]["billing_address"]["lastname"].ToString();
+
+                                                stTexto14 = rss["orders"][i]["customer"]["billing_address"]["firstname"].ToString() + " " +
+                                                            rss["orders"][i]["customer"]["billing_address"]["lastname"].ToString(); //Contacto
+                                                stTexto15 = rss["orders"][i]["_vendor_id"].ToString(); //Vendedor
+
+                                                switch (rss["orders"][i]["customer"]["shipping_address"]["state"].ToString()) //Region 
+                                                {
+                                                    case "I REGION": stTexto16 = "1"; break;
+                                                    case "II REGION": stTexto16 = "2"; break;
+                                                    case "III REGION": stTexto16 = "3"; break;
+                                                    case "IV REGION": stTexto16 = "4"; break;
+                                                    case "V REGION": stTexto16 = "5"; break;
+                                                    case "VI REGION": stTexto16 = "6"; break;
+                                                    case "VII REGION": stTexto16 = "7"; break;
+                                                    case "VIII REGION": stTexto16 = "8"; break;
+                                                    case "IX REGION": stTexto16 = "9"; break;
+                                                    case "X REGION": stTexto16 = "10"; break;
+                                                    case "XI REGION": stTexto16 = "11"; break;
+                                                    case "XII REGION": stTexto16 = "12"; break;
+                                                    case "XIV REGION": stTexto16 = "14"; break;
+                                                    case "XV REGION": stTexto16 = "15"; break;
+                                                    case "REG.METROPOLITANA": stTexto16 = "13"; break;
+                                                }
+
+                                                stTexto17 = rss["orders"][i]["customer"]["billing_address"]["city"].ToString(); //Ciudad
+                                                stTexto18 = rss["orders"][i]["customer"]["billing_address"]["city"].ToString(); //Comuna
+                                                stTexto19 = rss["orders"][i]["customer"]["billing_address"]["street_1"].ToString(); //Direccion
+                                                stTexto20 = ""; //Email
+                                                stTexto21 = ""; //RutaDespId
+                                                stTexto22 = ""; //Moneda
+                                                stTexto23 = ""; //TipoDocumento
+                                                stTexto24 = ""; //NumeroDocumento
+                                                stTexto25 = ""; //FechaDocto
+                                                stTexto26 = "OT"; //TipoReferencia
+                                                stTexto27 = rss["orders"][i]["order_id"].ToString(); //NumeroReferencia
+
+                                                LogInfo("IntegraOrdenesRipley-Fecha", rss["orders"][i]["created_date"].ToString());
+                                                Fecha = DateTime.Parse(rss["orders"][i]["created_date"].ToString());
+                                                stTexto28 = Fecha.ToString("yyyyMMdd");
+
+                                                //stTexto28 = rss["orders"][i]["created_date"].ToString().Substring(0,10).Replace("-",""); //FechaReferencia
+
+                                                stTexto29 = ""; //PorcTolerancia
+                                                stTexto30 = "Interface Ripley, CREA ORDEN - " + rss["orders"][i]["shop_name"].ToString(); //Glosa
+                                                stTexto31 = ""; //Linea
+
+                                                //realiza ciclo por los items de la orden e inserta
+                                                for (Int32 item = 0; item < (Int32)rss["orders"][i]["order_lines"].Count(); item++)
+                                                {
+                                                    stTexto32 = rss["orders"][i]["order_lines"][item]["offer_sku"].ToString(); //CodigoArticulo
+                                                    stTexto33 = ""; //CodigoOriginal
+                                                    stTexto34 = "UN"; //UnidadCompra
+                                                    stTexto35 = rss["orders"][i]["order_lines"][item]["quantity"].ToString(); //Cantidad
+
+                                                    //stTexto36 = rss["orders"][i]["order_lines"][item]["order_line_id"].ToString(); //ItemReferencia 
+                                                    stTexto36 = rss["orders"][i]["order_lines"][item]["order_line_index"].ToString(); //ItemReferencia 
+
+                                                    stTexto37 = ""; //Lote 
+                                                    stTexto38 = ""; //Referencia
+                                                    stTexto39 = ""; //Vencimiento
+                                                    stTexto40 = "1"; //Estado
+
+                                                    stLinea = stLinea + 1;
+
+                                                    //inserta en tabla de integracion
+                                                    WS_Integrador.Classes.model.InfF_Generador.Inserta_Integraciones(stArchivo,
+                                                                                                                     stUserName.Trim(),
+                                                                                                                     DateTime.Now, //stFechaProceso,
+                                                                                                                     stLinea,
+                                                                                                                     stTexto1.Trim(),
+                                                                                                                     stTexto2.Trim(),
+                                                                                                                     stTexto3.Trim(),
+                                                                                                                     stTexto4.Trim(),
+                                                                                                                     stTexto5.Trim(),
+                                                                                                                     stTexto6.Trim(),
+                                                                                                                     stTexto7.Trim(),
+                                                                                                                     stTexto8.Trim(),
+                                                                                                                     stTexto9.Trim(),
+                                                                                                                     stTexto10.Trim(),
+                                                                                                                     stTexto11.Trim(),
+                                                                                                                     stTexto12.Trim(),
+                                                                                                                     stTexto13.Trim(),
+                                                                                                                     stTexto14.Trim(),
+                                                                                                                     stTexto15.Trim(),
+                                                                                                                     stTexto16.Trim(),
+                                                                                                                     stTexto17.Trim(),
+                                                                                                                     stTexto18.Trim(),
+                                                                                                                     stTexto19.Trim(),
+                                                                                                                     stTexto20.Trim(),
+                                                                                                                     stTexto21.Trim(),
+                                                                                                                     stTexto22.Trim(),
+                                                                                                                     stTexto23.Trim(),
+                                                                                                                     stTexto24.Trim(),
+                                                                                                                     stTexto25.Trim(),
+                                                                                                                     stTexto26.Trim(),
+                                                                                                                     stTexto27.Trim(),
+                                                                                                                     stTexto28.Trim(),
+                                                                                                                     stTexto29.Trim(),
+                                                                                                                     stTexto30.Trim(),
+                                                                                                                     stTexto31.Trim(),
+                                                                                                                     stTexto32.Trim(),
+                                                                                                                     stTexto33.Trim(),
+                                                                                                                     stTexto34.Trim(),
+                                                                                                                     stTexto35.Trim(),
+                                                                                                                     stTexto36.Trim(),
+                                                                                                                     stTexto37.Trim(),
+                                                                                                                     stTexto38.Trim(),
+                                                                                                                     stTexto39.Trim(),
+                                                                                                                     stTexto40.Trim());
+                                                }
+
+                                                //Termina de recorrer los items de la orden, procesa la linea ------
+                                                DataSet myDataSet1 = new DataSet();
+                                                string resultIntegracion = "0";
+
+                                                LogInfo("IntegraOrdenesRipley", "Llamado GeneraProceso: " + stArchivo.Trim());
+
+                                                myDataSet1 = Tmpt_SolImportDespacho.GeneraProceso(stArchivo,
+                                                                                                  stUserName,
+                                                                                                  new DateTime(DateTime.Now.Year,
+                                                                                                               DateTime.Now.Month,
+                                                                                                               DateTime.Now.Day));
+                                                if (myDataSet1.Tables.Count > 0)
+                                                {
+                                                    int tabla1 = myDataSet1.Tables.Count;
+                                                    resultIntegracion = myDataSet1.Tables[tabla1 - 1].Rows[0]["Generacion"].ToString().Trim();
+
+                                                    if (resultIntegracion != "0")
+                                                    {
+                                                        LogInfo("IntegraOrdenesRipley", "Orden de Ripley integrada correctamente, " +
+                                                                                        "Id Orden: " + stTexto27.Trim() +
+                                                                                        ", SDD generada: " + myDataSet1.Tables[0].Rows[0]["Generacion"].ToString().Trim());
+                                                    }
+                                                    else
+                                                    {
+                                                        LogInfo("IntegraOrdenesRipley", "Error al integrar Orden de Ripley. " +
+                                                                                        "Id Orden: " + stTexto27.Trim() +
+                                                                                        ", Error: " + myDataSet1.Tables[0].Rows[0]["GlosaEstado"].ToString().Trim());
+                                                    }
                                                 }
                                                 else
                                                 {
-                                                    LogInfo("IntegraOrdenesRipley", "Error al integrar Orden de Ripley. " +
-                                                                                    "Id Orden: " + stTexto27.Trim() +
-                                                                                    ", Error: " + myDataSet1.Tables[0].Rows[0]["GlosaEstado"].ToString().Trim());
+                                                    LogInfo("IntegraOrdenesRipley", "Error luego de GeneraProceso para " + stArchivo.Trim() + ", el proceso no retornó tablas de salida");
                                                 }
-                                            }
-                                            else
-                                            {
-                                                LogInfo("IntegraOrdenesRipley", "Error luego de GeneraProceso para " + stArchivo.Trim() + ", el proceso no retornó tablas de salida");
-                                            }
 
-                                        } //FIN Si No existe
-
-                                    } //FIN Recorre Ordenes obtenidas desde Ripley -------
+                                            } 
+                                            //FIN Si No existe
+                                        } 
+                                        //FIN Recorre Ordenes obtenidas desde Ripley -------
+                                    }
+                                    else
+                                    {
+                                        break; //No hay mas ordenes, sale del ciclo
+                                    }
 
                                     offset = offset + limit;
 
@@ -6154,6 +6153,437 @@ namespace WS_itec2
                 LogInfo(ex.Message, "Error");
             }
         }
+
+        //private void IntegraOrdenesRipley()
+        //{
+        //    try
+        //    {
+        //        LogInfo("IntegraOrdenesRipley", "Inicio ejecucion proceso");
+
+        //        //para evitar error de seguridad en el llamado a la API ----------
+        //        ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; //TLS 1.2
+        //        ServicePointManager.SecurityProtocol = (SecurityProtocolType)768; //TLS 1.1 
+        //        System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12; // para error No se puede crear un canal seguro SSL/TLS
+
+        //        //string result = "";
+        //        string stEmpÌd = ConfigurationManager.AppSettings["EmpId"].ToString();
+        //        int EmpId;
+        //        //string sqlQuery = "";
+        //        string stArchivo = "";
+        //        string stUserName = "";
+        //        string stFechaProceso = "";
+        //        int total = 0;
+        //        int limit = 0;
+        //        int offset = 0;
+        //        int stLinea = 0;
+
+        //        #region Lista de Variables stTextoXX para tabla integracion
+        //        string stTexto1 = "";
+        //        string stTexto2 = "";
+        //        string stTexto3 = "";
+        //        string stTexto4 = "";
+        //        string stTexto5 = "";
+        //        string stTexto6 = "";
+        //        string stTexto7 = "";
+        //        string stTexto8 = "";
+        //        string stTexto9 = "";
+        //        string stTexto10 = "";
+        //        string stTexto11 = "";
+        //        string stTexto12 = "";
+        //        string stTexto13 = "";
+        //        string stTexto14 = "";
+        //        string stTexto15 = "";
+        //        string stTexto16 = "";
+        //        string stTexto17 = "";
+        //        string stTexto18 = "";
+        //        string stTexto19 = "";
+        //        string stTexto20 = "";
+        //        string stTexto21 = "";
+        //        string stTexto22 = "";
+        //        string stTexto23 = "";
+        //        string stTexto24 = "";
+        //        string stTexto25 = "";
+        //        string stTexto26 = "";
+        //        string stTexto27 = "";
+        //        string stTexto28 = "";
+        //        string stTexto29 = "";
+        //        string stTexto30 = "";
+        //        string stTexto31 = "";
+        //        string stTexto32 = "";
+        //        string stTexto33 = "";
+        //        string stTexto34 = "";
+        //        string stTexto35 = "";
+        //        string stTexto36 = "";
+        //        string stTexto37 = "";
+        //        string stTexto38 = "";
+        //        string stTexto39 = "";
+        //        string stTexto40 = "";
+        //        #endregion
+
+        //        //-------------------------------------------------------------
+
+        //        stUserName = "INTEGRADOR_API";
+
+        //        Int32.TryParse(stEmpÌd, out EmpId);
+        //        DataSet myDataSet = new DataSet();
+
+        //        //Trae url de API para listado de Ordenes de Ripley ----
+        //        DataSet myData = WS_Integrador.Classes.model.InfF_Generador.LeeRutaAPI(EmpId,
+        //                                                                               "RIPLEY_LIST_ORDERS");
+        //        if (myData.Tables.Count > 0)
+        //        {
+        //            for (int p = 0; p <= myData.Tables[0].Rows.Count - 1; p++)
+        //            {
+        //                //Carga ruta de la API de consulta de datos de producto desde Woocommerce segun nombre proceso --------------------
+        //                var client = new RestClient(myData.Tables[0].Rows[p]["URL_EndPoint"].ToString().Trim());
+
+        //                client.Timeout = -1;
+
+        //                //Indica el metodo de llamado de la API ----
+        //                var request = new RestRequest(Method.GET);
+        //                switch (myData.Tables[0].Rows[p]["Metodo"].ToString().Trim())
+        //                {
+        //                    case "GET":
+        //                        request = new RestRequest(Method.GET); //consulta
+        //                        break;
+        //                    case "POST":
+        //                        request = new RestRequest(Method.POST); //crea
+        //                        break;
+        //                    case "PUT":
+        //                        request = new RestRequest(Method.PUT); //modifica
+        //                        break;
+        //                }
+
+        //                //Trae informacion para headers de la API segun el nombre proceso -------
+        //                DataSet myData2 = WS_Integrador.Classes.model.InfF_Generador.ShowList_IntegraConfirmacionesJson_Headers(EmpId,
+        //                                                                                                                        myData.Tables[0].Rows[p]["NombreProceso"].ToString().Trim(),
+        //                                                                                                                        2);
+
+        //                //Carga listado de headers (atributo y valor) necesarios para realizar el llamado a la api ----------------
+        //                if (myData2.Tables.Count > 0)
+        //                {
+        //                    for (int k = 0; k <= myData2.Tables[0].Rows.Count - 1; k++)
+        //                    {
+        //                        //agrega key y su valor -----------
+        //                        request.AddHeader(myData2.Tables[0].Rows[k]["myKey"].ToString().Trim(), myData2.Tables[0].Rows[k]["myValue"].ToString().Trim());
+        //                    }
+        //                }
+
+        //                //Carga variable body a enviar
+        //                var body = @"";
+
+        //                request.AddParameter("text/plain", body, ParameterType.RequestBody);
+
+        //                LogInfo("IntegraOrdenesRipley", "Ejecuta llamado API Ordenes Ripley, " + myData.Tables[0].Rows[p]["NombreProceso"].ToString().Trim());
+
+        //                //Ejecuta llamado de la API --------------
+        //                IRestResponse response = client.Execute(request);
+        //                HttpStatusCode CodigoRetorno = response.StatusCode;
+
+        //                //Si finalizó OK --------------------------
+        //                if (CodigoRetorno.Equals(HttpStatusCode.OK))
+        //                {
+        //                    JObject rss = JObject.Parse(response.Content);
+
+        //                    //Si llamado se realizó OK continúa -----
+        //                    if (rss["message"].ToString() == "OK")
+        //                    {
+        //                        total = (Int32)rss["data"]["total"];
+        //                        limit = (Int32)rss["data"]["limit"];
+        //                        offset = (Int32)rss["data"]["offset"];
+
+        //                        //Calcula cuantas veces debe ejecutar la API para extraer los datos
+        //                        var ciclos = Math.Ceiling(Convert.ToDouble(total) / Convert.ToDouble(limit));
+
+        //                        for (Int32 c = 0; c < ciclos; c++)
+        //                        {
+        //                            if (c > 0) //solo entra si hace mas de 1 llamado a la API
+        //                            {
+        //                                //Agrega offset al siguiente llamado ----- 
+        //                                client = new RestClient(myData.Tables[0].Rows[p]["URL_EndPoint"].ToString().Trim() + @"&offset=" + offset.ToString());
+
+        //                                //Ejecuta llamado de la API --------------
+        //                                response = client.Execute(request);
+        //                                CodigoRetorno = response.StatusCode;
+
+        //                                rss = JObject.Parse(response.Content);
+        //                            }
+
+        //                            //Recorre Ordenes obtenidas desde Ripley -------
+        //                            for (Int32 i = 0; i < rss["data"]["orders"].Count(); i++)
+        //                            {
+        //                                //Valida si la Orden ya se ingresó a la tabla de integracion ==============================
+        //                                DataSet dsExiste = WS_Integrador.Classes.model.InfF_Generador.Busca_Integracion_Existente(stUserName,
+        //                                                                                                                          "INT-SOL-PEDIDO",
+        //                                                                                                                          "OT",
+        //                                                                                                                          rss["data"]["orders"][i]["order_id"].ToString());
+        //                                DateTime Fecha;
+        //                                int Existe;
+        //                                Existe = 0; //No
+
+        //                                if (dsExiste.Tables.Count > 0)
+        //                                {
+        //                                    if (dsExiste.Tables[0].Rows.Count > 0)
+        //                                    {
+        //                                        Existe = 1; //Si
+        //                                    }
+        //                                }
+
+        //                                //Si la referencia no existe en la tabla de integracion la procesa
+        //                                if (Existe == 0)
+        //                                {
+        //                                    stLinea = 0;
+
+        //                                    stArchivo = "ORDEN_RIPLEY_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + rss["data"]["orders"][i]["order_id"].ToString();
+        //                                    stFechaProceso = DateTime.Now.ToString("yyyyMMdd");
+
+        //                                    stTexto1 = "INT-SOL-PEDIDO"; //INT-NAME
+        //                                    stTexto2 = DateTime.Now.ToString("yyyyMMdd HHmmss"); //FECHAHORA
+        //                                    stTexto3 = "A"; //TIPO_TRK: Append
+        //                                    stTexto4 = ""; //Dato1 cabecera 
+        //                                    stTexto5 = rss["data"]["orders"][i]["_id"].ToString(); ; //Dato2 cabecera --> guardamos Id interno Solicitud Ripley
+        //                                    stTexto6 = EmpId.ToString(); //Empid
+        //                                    stTexto7 = DateTime.Now.ToString("yyyyMMdd"); //FechaDigitacion
+        //                                    stTexto8 = "INTEGRADOR_API"; //UsuarioDigitacion
+        //                                    stTexto9 = DateTime.Now.ToString("yyyyMMdd"); //FechaProceso
+        //                                    stTexto10 = "7"; //TipoSolicitud= Ripley
+        //                                    stTexto11 = ""; //Comprador
+        //                                    stTexto12 = ""; //RutCliente
+
+        //                                    //stTexto13 = rss["data"]["orders"][i]["customer"]["billing_address"]["company"].ToString(); //RazonSocial
+        //                                    stTexto13 = rss["data"]["orders"][i]["customer"]["billing_address"]["firstname"].ToString() + " " +
+        //                                                rss["data"]["orders"][i]["customer"]["billing_address"]["lastname"].ToString();
+
+        //                                    stTexto14 = rss["data"]["orders"][i]["customer"]["billing_address"]["firstname"].ToString() + " " +
+        //                                                rss["data"]["orders"][i]["customer"]["billing_address"]["lastname"].ToString(); //Contacto
+        //                                    stTexto15 = rss["data"]["orders"][i]["_vendor_id"].ToString(); //Vendedor
+
+        //                                    switch (rss["data"]["orders"][i]["customer"]["shipping_address"]["state"].ToString()) //Region 
+        //                                    {
+        //                                        case "I REGION": stTexto16 = "1"; break;
+        //                                        case "II REGION": stTexto16 = "2"; break;
+        //                                        case "III REGION": stTexto16 = "3"; break;
+        //                                        case "IV REGION": stTexto16 = "4"; break;
+        //                                        case "V REGION": stTexto16 = "5"; break;
+        //                                        case "VI REGION": stTexto16 = "6"; break;
+        //                                        case "VII REGION": stTexto16 = "7"; break;
+        //                                        case "VIII REGION": stTexto16 = "8"; break;
+        //                                        case "IX REGION": stTexto16 = "9"; break;
+        //                                        case "X REGION": stTexto16 = "10"; break;
+        //                                        case "XI REGION": stTexto16 = "11"; break;
+        //                                        case "XII REGION": stTexto16 = "12"; break;
+        //                                        case "XIV REGION": stTexto16 = "14"; break;
+        //                                        case "XV REGION": stTexto16 = "15"; break;
+        //                                        case "REG.METROPOLITANA": stTexto16 = "13"; break;
+        //                                    }
+
+        //                                    stTexto17 = rss["data"]["orders"][i]["customer"]["billing_address"]["city"].ToString(); //Ciudad
+        //                                    stTexto18 = rss["data"]["orders"][i]["customer"]["billing_address"]["city"].ToString(); //Comuna
+        //                                    stTexto19 = rss["data"]["orders"][i]["customer"]["billing_address"]["street_1"].ToString(); //Direccion
+        //                                    stTexto20 = ""; //Email
+        //                                    stTexto21 = ""; //RutaDespId
+        //                                    stTexto22 = ""; //Moneda
+        //                                    stTexto23 = ""; //TipoDocumento
+        //                                    stTexto24 = ""; //NumeroDocumento
+        //                                    stTexto25 = ""; //FechaDocto
+        //                                    stTexto26 = "OT"; //TipoReferencia
+        //                                    stTexto27 = rss["data"]["orders"][i]["order_id"].ToString(); //NumeroReferencia
+
+        //                                    LogInfo("IntegraOrdenesRipley-Fecha", rss["data"]["orders"][i]["created_date"].ToString());
+        //                                    Fecha = DateTime.Parse(rss["data"]["orders"][i]["created_date"].ToString());
+        //                                    stTexto28 = Fecha.ToString("yyyyMMdd");
+
+        //                                    //stTexto28 = rss["data"]["orders"][i]["created_date"].ToString().Substring(0,10).Replace("-",""); //FechaReferencia
+
+        //                                    stTexto29 = ""; //PorcTolerancia
+        //                                    stTexto30 = "Interface Ripley, CREA ORDEN - " + rss["data"]["orders"][i]["shop_name"].ToString(); //Glosa
+        //                                    stTexto31 = ""; //Linea
+
+        //                                    //realiza ciclo por los items de la orden e inserta
+        //                                    for (Int32 item = 0; item < (Int32)rss["data"]["orders"][i]["order_lines"].Count(); item++)
+        //                                    {
+        //                                        stTexto32 = rss["data"]["orders"][i]["order_lines"][item]["offer_sku"].ToString(); //CodigoArticulo
+        //                                        stTexto33 = ""; //CodigoOriginal
+        //                                        stTexto34 = "UN"; //UnidadCompra
+        //                                        stTexto35 = rss["data"]["orders"][i]["order_lines"][item]["quantity"].ToString(); //Cantidad
+
+        //                                        //stTexto36 = rss["data"]["orders"][i]["order_lines"][item]["order_line_id"].ToString(); //ItemReferencia 
+        //                                        stTexto36 = rss["data"]["orders"][i]["order_lines"][item]["order_line_index"].ToString(); //ItemReferencia 
+
+        //                                        stTexto37 = ""; //Lote 
+        //                                        stTexto38 = ""; //Referencia
+        //                                        stTexto39 = ""; //Vencimiento
+        //                                        stTexto40 = "1"; //Estado
+
+        //                                        stLinea = stLinea + 1;
+
+        //                                        //inserta en tabla de integracion
+        //                                        WS_Integrador.Classes.model.InfF_Generador.Inserta_Integraciones(stArchivo,
+        //                                                                                                         stUserName.Trim(),
+        //                                                                                                         DateTime.Now, //stFechaProceso,
+        //                                                                                                         stLinea,
+        //                                                                                                         stTexto1.Trim(),
+        //                                                                                                         stTexto2.Trim(),
+        //                                                                                                         stTexto3.Trim(),
+        //                                                                                                         stTexto4.Trim(),
+        //                                                                                                         stTexto5.Trim(),
+        //                                                                                                         stTexto6.Trim(),
+        //                                                                                                         stTexto7.Trim(),
+        //                                                                                                         stTexto8.Trim(),
+        //                                                                                                         stTexto9.Trim(),
+        //                                                                                                         stTexto10.Trim(),
+        //                                                                                                         stTexto11.Trim(),
+        //                                                                                                         stTexto12.Trim(),
+        //                                                                                                         stTexto13.Trim(),
+        //                                                                                                         stTexto14.Trim(),
+        //                                                                                                         stTexto15.Trim(),
+        //                                                                                                         stTexto16.Trim(),
+        //                                                                                                         stTexto17.Trim(),
+        //                                                                                                         stTexto18.Trim(),
+        //                                                                                                         stTexto19.Trim(),
+        //                                                                                                         stTexto20.Trim(),
+        //                                                                                                         stTexto21.Trim(),
+        //                                                                                                         stTexto22.Trim(),
+        //                                                                                                         stTexto23.Trim(),
+        //                                                                                                         stTexto24.Trim(),
+        //                                                                                                         stTexto25.Trim(),
+        //                                                                                                         stTexto26.Trim(),
+        //                                                                                                         stTexto27.Trim(),
+        //                                                                                                         stTexto28.Trim(),
+        //                                                                                                         stTexto29.Trim(),
+        //                                                                                                         stTexto30.Trim(),
+        //                                                                                                         stTexto31.Trim(),
+        //                                                                                                         stTexto32.Trim(),
+        //                                                                                                         stTexto33.Trim(),
+        //                                                                                                         stTexto34.Trim(),
+        //                                                                                                         stTexto35.Trim(),
+        //                                                                                                         stTexto36.Trim(),
+        //                                                                                                         stTexto37.Trim(),
+        //                                                                                                         stTexto38.Trim(),
+        //                                                                                                         stTexto39.Trim(),
+        //                                                                                                         stTexto40.Trim());
+        //                                        #region llamadoAntiguo
+        //                                        //llamadoAntiguo --------
+        //                                        //sqlQuery = "Insert Into L_Integraciones (Archivo, UserName, FechaProceso, Linea, ";
+        //                                        //sqlQuery += "Texto1 , Texto2 , Texto3 , Texto4 , Texto5 , Texto6 , Texto7 , Texto8 , Texto9 , Texto10,";
+        //                                        //sqlQuery += "Texto11, Texto12, Texto13, Texto14, Texto15, Texto16, Texto17, Texto18, Texto19, Texto20,";
+        //                                        //sqlQuery += "Texto21, Texto22, Texto23, Texto24, Texto25, Texto26, Texto27, Texto28, Texto29, Texto30,";
+        //                                        //sqlQuery += "Texto31, Texto32, Texto33, Texto34, Texto35, Texto36, Texto37, Texto38, Texto39, Texto40) values (";
+
+        //                                        //sqlQuery += "'" + stArchivo.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stUserName.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stFechaProceso + "'";
+        //                                        //sqlQuery += ",'" + stLinea + "'";
+        //                                        //sqlQuery += ",'" + stTexto1.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto2.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto3.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto4.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto5.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto6.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto7.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto8.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto9.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto10.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto11.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto12.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto13.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto14.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto15.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto16.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto17.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto18.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto19.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto20.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto21.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto22.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto23.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto24.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto25.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto26.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto27.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto28.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto29.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto30.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto31.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto32.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto33.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto34.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto35.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto36.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto37.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto38.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto39.Trim() + "'";
+        //                                        //sqlQuery += ",'" + stTexto40.Trim() + "'";
+        //                                        //sqlQuery += ")";
+        //                                        //result = Tmpt_SolImportDespacho.InsertarRegistro_OleDb("", sqlQuery);
+        //                                        #endregion
+        //                                    }
+
+        //                                    //Termina de recorrer los items de la orden, procesa la linea ------
+        //                                    DataSet myDataSet1 = new DataSet();
+        //                                    string resultIntegracion = "0";
+
+        //                                    LogInfo("IntegraOrdenesRipley", "Llamado GeneraProceso: " + stArchivo.Trim());
+
+        //                                    myDataSet1 = Tmpt_SolImportDespacho.GeneraProceso(stArchivo,
+        //                                                                                      stUserName,
+        //                                                                                      new DateTime(DateTime.Now.Year,
+        //                                                                                                   DateTime.Now.Month,
+        //                                                                                                   DateTime.Now.Day));
+        //                                    if (myDataSet1.Tables.Count > 0)
+        //                                    {
+        //                                        int tabla1 = myDataSet1.Tables.Count;
+        //                                        resultIntegracion = myDataSet1.Tables[tabla1 - 1].Rows[0]["Generacion"].ToString().Trim();
+
+        //                                        if (resultIntegracion != "0")
+        //                                        {
+        //                                            LogInfo("IntegraOrdenesRipley", "Orden de Ripley integrada correctamente, " +
+        //                                                                            "Id Orden: " + stTexto27.Trim() +
+        //                                                                            ", SDD generada: " + myDataSet1.Tables[0].Rows[0]["Generacion"].ToString().Trim());
+
+        //                                        }
+        //                                        else
+        //                                        {
+        //                                            LogInfo("IntegraOrdenesRipley", "Error al integrar Orden de Ripley. " +
+        //                                                                            "Id Orden: " + stTexto27.Trim() +
+        //                                                                            ", Error: " + myDataSet1.Tables[0].Rows[0]["GlosaEstado"].ToString().Trim());
+        //                                        }
+        //                                    }
+        //                                    else
+        //                                    {
+        //                                        LogInfo("IntegraOrdenesRipley", "Error luego de GeneraProceso para " + stArchivo.Trim() + ", el proceso no retornó tablas de salida");
+        //                                    }
+
+        //                                } //FIN Si No existe
+
+        //                            } //FIN Recorre Ordenes obtenidas desde Ripley -------
+
+        //                            offset = offset + limit;
+
+        //                        } //FIN ciclo de llamados a la API 
+        //                    }
+        //                    else
+        //                    {
+        //                        LogInfo("IntegraOrdenesRipley", "Error al ejecutar llamado API Ordenes Ripley. " + rss["message"].ToString().Trim());
+        //                    }
+        //                }
+        //                else
+        //                {
+        //                    LogInfo("IntegraOrdenesRipley", "Error llamado API Integra Ordenes Ripley");
+        //                }
+        //            }
+        //        }
+        //        else
+        //        {
+        //            LogInfo("IntegraOrdenesRipley", "Problema al leer ruta API");
+        //        }
+
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LogInfo(ex.Message, "Error");
+        //    }
+        //}
 
         //Generacion Etiquetas Ripley
         private void GeneraEtiquetasRipley()
@@ -6401,12 +6831,12 @@ namespace WS_itec2
             }
         }
 
-        // Servicio WEB integracion Confirmacion Recepcion - despacho INET - SIWMS_WSRecepcionConfirmacion 
-        private void ConfirmacionRecepcionINET(string NombreProceso)
+        // Servicio WEB integracion Confirmacion Despacho INET - SIWMS_WSRecepcionConfirmacion 
+        private void ConfirmacionDespachoINET(string NombreProceso)
         {
             try
             {
-                LogInfo("ConfirmacionRecepcionINET", NombreProceso.Trim() + ". " + "Inicio ejecucion");
+                LogInfo("ConfirmacionDespachoINET", NombreProceso.Trim() + ". " + "Inicio ejecucion");
 
                 //para evitar error de seguridad en el llamado a la API ----------
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; //TLS 1.2
@@ -6424,7 +6854,7 @@ namespace WS_itec2
                                                                                        NombreProceso);
                 if (dsRuta.Tables.Count > 0)
                 {
-                    //Extrae RDM (Recepciones de mercancia) que debe integrar a INET ----------
+                    //Extrae ODP (Olas de Picking) que debe integrar a INET ----------
                     DataSet myData = WS_Integrador.Classes.model.InfF_Generador.ShowList_IntegraConfirmacionesJson(EmpId,
                                                                                                                    NombreProceso);
                     if (myData.Tables.Count > 0) 
@@ -6440,7 +6870,7 @@ namespace WS_itec2
                             //string varREC_MovNumRef = "";
                             string varIdCab = "";
 
-                            //Recorre la confirmaciones de recepcion que retornó --------------
+                            //Recorre la confirmaciones de despacho que retornó --------------
                             for (int i = 0; i <= myData.Tables[0].Rows.Count - 1; i++) 
                             {
                                 //Cuando cambie de ODP de la tabla de integracion debe cargar una nueva estructura con la API -----
@@ -6670,7 +7100,7 @@ namespace WS_itec2
 
                                     if (NombreProceso.Trim() == "CONFIRMACION_RECEPCION_INET")
                                     {
-                                        LogInfo("ConfirmacionRecepcionINET",NombreProceso.Trim() + ". " + 
+                                        LogInfo("ConfirmacionDespachoINET", NombreProceso.Trim() + ". " + 
                                                                             "Ejecutara api con Recepcion n°: " + myData.Tables[0].Rows[i]["Folio"].ToString().Trim() +
                                                                             ", SDR N°: " + myData.Tables[0].Rows[i]["FolioRel"].ToString().Trim() +
                                                                             ", Referencia INET:" + myData.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim() +
@@ -6678,7 +7108,7 @@ namespace WS_itec2
                                     }
                                     else
                                     {
-                                        LogInfo("ConfirmacionRecepcionINET", NombreProceso.Trim() + ". " + 
+                                        LogInfo("ConfirmacionDespachoINET", NombreProceso.Trim() + ". " + 
                                                                              "Ejecutara api con ODP N°: " + myData.Tables[0].Rows[i]["Folio"].ToString().Trim() +
                                                                              ", SDD N°: " + myData.Tables[0].Rows[i]["FolioRel"].ToString().Trim() +
                                                                              ", Referencia INET:" + myData.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim() +
@@ -6718,7 +7148,7 @@ namespace WS_itec2
                                                                                      rss["SDTRespuestas"]["Datos"][Res]["DATO"].ToString().Trim() + ".";
                                             }
 
-                                            LogInfo("ConfirmacionRecepcionINET.", NombreProceso.Trim() + ". " + "Integracion OK. " + Respuesta.Trim());
+                                            LogInfo("ConfirmacionDespachoINET.", NombreProceso.Trim() + ". " + "Integracion OK. " + Respuesta.Trim());
                                         }
 
                                         //Si retorno Con errores
@@ -6730,7 +7160,7 @@ namespace WS_itec2
                                                 Respuesta = Respuesta.Trim() + " " + rss["SDTRespuestas"]["Errores"][Res]["ErrorDescripcion"].ToString().Trim() + ".";
                                             }
 
-                                            LogInfo("ConfirmacionRecepcionINET", NombreProceso.Trim() + ". "+ 
+                                            LogInfo("ConfirmacionDespachoINET", NombreProceso.Trim() + ". "+ 
                                                                                  "Error api Folio: " + myData.Tables[0].Rows[i]["Folio"].ToString().Trim() +
                                                                                  ", Error: " + Respuesta.Trim() + 
                                                                                  ". JSON: " + body.ToString(),true);
@@ -6752,7 +7182,7 @@ namespace WS_itec2
                                             Respuesta = "";
                                         }
 
-                                        LogInfo("ConfirmacionRecepcionINET", NombreProceso.Trim() + ". " + 
+                                        LogInfo("ConfirmacionDespachoINET", NombreProceso.Trim() + ". " + 
                                                                              "Error api Folio: " +
                                                                              myData.Tables[0].Rows[i]["Folio"].ToString().Trim() + Respuesta.Trim() + 
                                                                              ". JSON: " + body.ToString(), true);
@@ -6771,12 +7201,12 @@ namespace WS_itec2
             }
             catch (Exception ex)
             {
-                LogInfo("ConfirmacionRecepcionINET", NombreProceso.Trim() + ". " + "Error: " + ex.Message, true);
+                LogInfo("ConfirmacionDespachoINET", NombreProceso.Trim() + ". " + "Error: " + ex.Message, true);
             }
         }
 
         // Servicio WEB integracion Confirmacion Recepcion INET - SIWMS_WSRecepcionConfirmacion 
-        private void ConfirmacionRecepcionINET_RDM(string NombreProceso)
+        private void ConfirmacionRecepcionINET(string NombreProceso)
         {
             try
             {
@@ -6870,7 +7300,6 @@ namespace WS_itec2
                                     varIdCab = myData.Tables[0].Rows[i]["IdCab"].ToString().Trim();
 
                                     Cabecera.REC_MovTpo = int.Parse(myData.Tables[0].Rows[i]["REC_MovTpo"].ToString().Trim());
-
                                     Cabecera.REC_MovIden = 0; // long.Parse(myData.Tables[0].Rows[i]["REC_MovIden"].ToString().Trim());
 
                                     //concatena lo siguiente orden_compra_recibida_de_INET;tipo_documento_SII;numero_documento_recepcionado (factura)

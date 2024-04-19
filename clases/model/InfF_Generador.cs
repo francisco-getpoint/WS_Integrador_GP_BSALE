@@ -1396,5 +1396,37 @@ namespace WS_Integrador.Classes.model
             }
             return myDataSet;
         }
+
+        public static string GuardaLogEnBaseDatos(string NombreProceso, string Referencia, string Mensaje, string JSON)
+        {
+            OleDbConnection myConnection = DB.getConnection();
+            OleDbCommand myCommand = new OleDbCommand("sp_in_API_LogAPI", myConnection);
+            myCommand.CommandType = CommandType.StoredProcedure;
+
+            myCommand.Parameters.Add("@NombreProceso", OleDbType.VarChar).Value = NombreProceso;
+            myCommand.Parameters.Add("@Referencia", OleDbType.VarChar).Value = Referencia;
+            myCommand.Parameters.Add("@Mensaje", OleDbType.VarChar).Value = Mensaje;
+            myCommand.Parameters.Add("@JSON", OleDbType.VarChar).Value = JSON;
+
+            string result;
+            try
+            {
+                myCommand.CommandTimeout = 99999;
+                myConnection.Open();
+                myCommand.ExecuteNonQuery();
+                result = "OK";
+            }
+            catch (Exception ex)
+            {
+                result = "Error";
+                throw new Exception(ex.Message.ToString());
+            }
+            finally
+            {
+                myConnection.Close();
+                myConnection.Dispose();
+            }
+            return result;
+        }
     }
 }
