@@ -1428,5 +1428,37 @@ namespace WS_Integrador.Classes.model
             }
             return result;
         }
+        public static string InformaRespuestaWebhook(string NombreProceso, int EmpIdGlobal, int Folio, int FolioRel, string Descripcion)
+        {
+            OleDbConnection myConnection = DB.getConnection();
+            OleDbCommand myCommand = new OleDbCommand("sp_upd_API_InformaRespuestaWebhook", myConnection);
+            myCommand.CommandType = CommandType.StoredProcedure;
+
+            myCommand.Parameters.Add("@NombreProceso", OleDbType.VarChar).Value = NombreProceso;
+            myCommand.Parameters.Add("@EmpIdGlobal", OleDbType.Integer).Value = EmpIdGlobal;
+            myCommand.Parameters.Add("@Folio", OleDbType.Numeric).Value = Folio;
+            myCommand.Parameters.Add("@FolioRel", OleDbType.Numeric).Value = FolioRel;
+            myCommand.Parameters.Add("@Descripcion", OleDbType.VarChar).Value = Descripcion;
+
+            string result;
+            try
+            {
+                myCommand.CommandTimeout = 99999;
+                myConnection.Open();
+                myCommand.ExecuteNonQuery();
+                result = "OK";
+            }
+            catch (Exception ex)
+            {
+                result = "Error";
+                throw new Exception(ex.Message.ToString());
+            }
+            finally
+            {
+                myConnection.Close();
+                myConnection.Dispose();
+            }
+            return result;
+        }
     }
 }

@@ -7161,13 +7161,20 @@ namespace WS_itec2
                                             }
 
                                             LogInfo("ConfirmacionDespachoINET", NombreProceso.Trim() + ". "+ 
-                                                                                 "Error api Folio: " + myData.Tables[0].Rows[i]["Folio"].ToString().Trim() +
-                                                                                 ", Error: " + Respuesta.Trim() + 
-                                                                                 ". JSON: " + body.ToString(),true);
+                                                                                "Error api Folio: " + myData.Tables[0].Rows[i]["Folio"].ToString().Trim() +
+                                                                                ", Error: " + Respuesta.Trim() + 
+                                                                                ". JSON: " + body.ToString(),true);
 
                                             //Actualiza estado de L_IntegraConfirmacionesDet, deja en estado Procesado 
                                             result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoIntegraConfirmaciones(int.Parse(myData.Tables[0].Rows[i]["IntId"].ToString()),
                                                                                                                                      3); //Procesado con error 
+
+                                            //Guarda respuesta en Dato2 procesada -------------
+                                            result = WS_Integrador.Classes.model.InfF_Generador.InformaRespuestaWebhook(NombreProceso.Trim(),
+                                                                                                                        EmpId,
+                                                                                                                        int.Parse(myData.Tables[0].Rows[i]["Folio"].ToString()),
+                                                                                                                        int.Parse(myData.Tables[0].Rows[i]["FolioRel"].ToString()),
+                                                                                                                        "Resultado: Error. Descripcion: " + Respuesta.Trim());
                                         }
                                     }
                                     else
