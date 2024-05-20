@@ -587,7 +587,8 @@ namespace WS_itec2
             public int location_id { get; set; }
 
             [DataMember(Order = 2)]
-            public string sku { get; set; }
+            //public string sku { get; set; }
+            public int product_id { get; set; }
 
             [DataMember(Order = 3)]
             public int quantity { get; set; }
@@ -850,7 +851,7 @@ namespace WS_itec2
                 if (ConfigurationManager.AppSettings["Activa_ActualizaStockEComm_BigCommerce"].ToString() == "True")
                 {
                     // 27 Actualiza stocks en BigCommerce - actualizacion masiva por SKU
-                    ActualizaStockEComm_BigCommerce();
+                    ActualizaStockEComm_BigCommerce("ActualizaStockEComm_BigCommerce");
                 }                
 
                 this.tmServicio1.Start();
@@ -7896,7 +7897,6 @@ namespace WS_itec2
             }
         }
 
-        //=====================================
         //WEBHOOK CONFIRMACION SDR
         //=====================================
         private void ConfirmacionIngresoWebHook(string NombreProceso)
@@ -8109,7 +8109,6 @@ namespace WS_itec2
             }
         }
 
-        //=====================================
         //WEBHOOK CONFIRMACION SDD
         //=====================================
         private void ConfirmacionSalidaWebHook(string NombreProceso)
@@ -8316,11 +8315,11 @@ namespace WS_itec2
         }
 
         //Actualiza stocks en BigCommerce - actualizacion masiva por SKU
-        private void ActualizaStockEComm_BigCommerce()
+        private void ActualizaStockEComm_BigCommerce(string NombreProceso)
         {
             try
             {
-                LogInfo("ActualizaStockEComm_BigCommerce", "Inicio ejecucion proceso", true);
+                LogInfo(NombreProceso, "Inicio ejecucion proceso", true);
 
                 //agregar para evitar error de seguridad en el llamado a la API ----------
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; //TLS 1.2
@@ -8361,10 +8360,10 @@ namespace WS_itec2
                         // Si tiene URL donde actualizar 
                         if (myDataUpd.Tables[0].Rows[i]["URL_EndPoint"].ToString().Trim() != "")
                         {
-                            //LogInfo("ActualizaStockEComm_BigCommerce", "url endpoint: " + myDataUpd.Tables[0].Rows[i]["URL_EndPoint"].ToString().Trim());
-                            //LogInfo("ActualizaStockEComm_BigCommerce", "ruta: " + Ruta.Trim());
-                            //LogInfo("ActualizaStockEComm_BigCommerce", "Contador: " + Contador.ToString());
-                            //LogInfo("ActualizaStockEComm_BigCommerce", "cantidadproductosenvio: " + CantidadProductosEnvio.ToString());
+                            //LogInfo(NombreProceso, "url endpoint: " + myDataUpd.Tables[0].Rows[i]["URL_EndPoint"].ToString().Trim());
+                            //LogInfo(NombreProceso, "ruta: " + Ruta.Trim());
+                            //LogInfo(NombreProceso, "Contador: " + Contador.ToString());
+                            //LogInfo(NombreProceso, "cantidadproductosenvio: " + CantidadProductosEnvio.ToString());
 
                             //Si cambia de Ruta o llego a la cantidad de productos por llamado ejecuta API Bigcommerce
                             if (myDataUpd.Tables[0].Rows[i]["URL_EndPoint"].ToString().Trim() != Ruta.Trim() || Contador >= CantidadProductosEnvio)
@@ -8409,7 +8408,7 @@ namespace WS_itec2
                                     //Crea body para llamado con estructura de variable cargada ---
                                     var body2 = JsonConvert.SerializeObject(Cabecera);
 
-                                    //LogInfo("ActualizaStockEComm_BigCommerce", "Llama API actualiza stock Articulo " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
+                                    //LogInfo(NombreProceso, "Llama API actualiza stock Articulo " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
 
                                     request.AddParameter("application/json", body2, ParameterType.RequestBody);
 
@@ -8420,7 +8419,7 @@ namespace WS_itec2
                                     //Si finalizó OK --------------------------
                                     if (CodigoRetorno.Equals(HttpStatusCode.OK))
                                     {
-                                        LogInfo("ActualizaStockEComm_BigCommerce", "Actualizacion Stock OK. Corte control fila: " + (i + 1).ToString());
+                                        LogInfo(NombreProceso, "Actualizacion Stock OK. Corte control fila: " + (i + 1).ToString());
 
                                         //Actualiza estado de L_IntegraConfirmaciones, deja en estado traspasado (Estado = 2) ------
                                         result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmaciones(int.Parse(myDataUpd.Tables[0].Rows[i]["IntId"].ToString()));
@@ -8435,14 +8434,14 @@ namespace WS_itec2
                                         if (responseStock.Content != "")
                                         {
                                             JObject rss = JObject.Parse(responseStock.Content);
-                                            LogInfo("ActualizaStockEComm_BigCommerce", "Error actualiza Stock: Status:" + rss["status"] + "," + rss["title"] +
-                                                                           ". JSON: " + body2.ToString());
+                                            LogInfo(NombreProceso, "Error actualiza Stock: Status:" + rss["status"] + "," + rss["title"] +
+                                                                   ". JSON: " + body2.ToString());
                                         }
                                         else
                                         {
                                             //JObject rss = JObject.Parse(responseStock.Content);
-                                            LogInfo("ActualizaStockEComm_BigCommerce", "Error actualiza Stock: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim() + " (json no retorna datos)," +
-                                                                           ". JSON: " + body2.ToString());
+                                            LogInfo(NombreProceso, "Error actualiza Stock: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim() + " (json no retorna datos)," +
+                                                                   ". JSON: " + body2.ToString());
                                         }
 
                                         //Actualiza estado de L_IntegraConfirmacionesDet, deja en estado Procesado con Error (Estado = 2)------
@@ -8465,12 +8464,15 @@ namespace WS_itec2
 
                             //Agrega producto al listado 
                             Detalle = new Detalle_ActualizaStockBigCommerce();
+
                             Detalle.location_id = 1;
-                            Detalle.sku = myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim();
+                            //Detalle.sku = myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim();
+                            Detalle.product_id = int.Parse(myDataUpd.Tables[0].Rows[i]["ItemReferencia"].ToString().Trim());
                             Detalle.quantity = int.Parse(myDataUpd.Tables[0].Rows[i]["CantidadEntera"].ToString());
+
                             Cabecera.items.Add(Detalle);
 
-                            //LogInfo("ActualizaStockEComm_BigCommerce", "fila:" + i.ToString() + ". Agrega Articulo: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
+                            //LogInfo(NombreProceso, "fila:" + i.ToString() + ". Agrega Articulo: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
 
                             Contador = Contador + 1;
 
@@ -8521,7 +8523,7 @@ namespace WS_itec2
                             //Crea body para llamado con estructura de variable cargada ---
                             var body2 = JsonConvert.SerializeObject(Cabecera);
 
-                            //LogInfo("ActualizaStockEComm_BigCommerce", "Llama API actualiza stock Articulo " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
+                            //LogInfo(NombreProceso, "Llama API actualiza stock Articulo " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
 
                             request.AddParameter("application/json", body2, ParameterType.RequestBody);
 
@@ -8532,7 +8534,7 @@ namespace WS_itec2
                             //Si finalizó OK --------------------------
                             if (CodigoRetorno.Equals(HttpStatusCode.OK))
                             {
-                                LogInfo("ActualizaStockEComm_BigCommerce", "Actualizacion Stock OK. Ultimo envio");
+                                LogInfo(NombreProceso, "Actualizacion Stock OK. Ultimo envio");
 
                                 //Actualiza estado de L_IntegraConfirmaciones, deja en estado traspasado (Estado = 2) ------
                                 result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmaciones(int.Parse(myDataUpd.Tables[0].Rows[i]["IntId"].ToString()));
@@ -8547,13 +8549,13 @@ namespace WS_itec2
                                 if (responseStock.Content != "")
                                 {
                                     JObject rss = JObject.Parse(responseStock.Content);
-                                    LogInfo("ActualizaStockEComm_BigCommerce", "Error actualiza Stock: Status:" + rss["status"] + "," + rss["title"] +
+                                    LogInfo(NombreProceso, "Error actualiza Stock: Status:" + rss["status"] + "," + rss["title"] +
                                                                    ". JSON: " + body2.ToString());
                                 }
                                 else
                                 {
                                     //JObject rss = JObject.Parse(responseStock.Content);
-                                    LogInfo("ActualizaStockEComm_BigCommerce", "Error actualiza Stock: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim() + " (json no retorna datos)," +
+                                    LogInfo(NombreProceso, "Error actualiza Stock: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim() + " (json no retorna datos)," +
                                                                    ". JSON: " + body2.ToString());
                                 }
 
@@ -8568,11 +8570,11 @@ namespace WS_itec2
                     }
                 }
 
-                LogInfo("ActualizaStockEComm_BigCommerce", "FIN ejecucion proceso");
+                LogInfo(NombreProceso, "FIN ejecucion proceso");
             }
             catch (Exception ex)
             {
-                LogInfo("ActualizaStockEComm_BigCommerce", "Error: " + ex.Message, true);
+                LogInfo(NombreProceso, "Error: " + ex.Message, true);
             }
         }
 
