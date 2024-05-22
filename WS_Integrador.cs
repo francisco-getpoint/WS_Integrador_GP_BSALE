@@ -570,18 +570,18 @@ namespace WS_itec2
         //}
 
         [DataContract]
-        public class ActualizaStockBigCommerce
+        public class ActualizaStockBigCommerceProducto
         {
             [DataMember(Order = 1)]
             public string reason { get; set; }
 
             [DataMember(Order = 99)]
 
-            public List<Detalle_ActualizaStockBigCommerce> items = new List<Detalle_ActualizaStockBigCommerce>();
+            public List<Detalle_ActualizaStockBigCommerceProducto> items = new List<Detalle_ActualizaStockBigCommerceProducto>();
         }
 
         [DataContract]
-        public class Detalle_ActualizaStockBigCommerce
+        public class Detalle_ActualizaStockBigCommerceProducto
         {
             [DataMember(Order = 1)]
             public int location_id { get; set; }
@@ -589,6 +589,31 @@ namespace WS_itec2
             [DataMember(Order = 2)]
             //public string sku { get; set; }
             public int product_id { get; set; }
+
+            [DataMember(Order = 3)]
+            public int quantity { get; set; }
+        }
+
+        [DataContract]
+        public class ActualizaStockBigCommerceVariante
+        {
+            [DataMember(Order = 1)]
+            public string reason { get; set; }
+
+            [DataMember(Order = 99)]
+
+            public List<Detalle_ActualizaStockBigCommerceVariante> items = new List<Detalle_ActualizaStockBigCommerceVariante>();
+        }
+
+        [DataContract]
+        public class Detalle_ActualizaStockBigCommerceVariante
+        {
+            [DataMember(Order = 1)]
+            public int location_id { get; set; }
+
+            [DataMember(Order = 2)]
+            //public string sku { get; set; }
+            public int variant_id { get; set; }
 
             [DataMember(Order = 3)]
             public int quantity { get; set; }
@@ -4232,7 +4257,7 @@ namespace WS_itec2
         //Este mensaje depende de la configuracion para ocultar o no los mensajes de Log
         //Por defecto los mensajes se ocultaran cuando RegistroArchivoLog = "NO"
         //Si el mensaje se indica MostrarSiempre lo mostrara independiente lo que diga la Key RegistroArchivoLog 
-        public static void LogInfo(string sMessage, string motivo, bool MostrarSiempre = false, bool GuardarEnBD = false, string NombreProceso = "", string Referencia = "", string EstructuraJSON = "")
+        public static void LogInfo(string Proceso, string Mensaje, bool MostrarSiempre = false, bool GuardarEnBD = false, string NombreProceso = "", string Referencia = "", string EstructuraJSON = "")
         {
             try
             {
@@ -4244,33 +4269,36 @@ namespace WS_itec2
                     StringBuilder html = new StringBuilder();
                     string FilePath = ConfigurationManager.AppSettings["PathLogITEC"].ToString() + "\\Log_Integrador_" + DateTime.Now.ToString("MMdd") + ".txt";
 
-                    //html.Append("[" + sMessage.ToString() + "]. Fecha/Hora " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToLongTimeString() + ". " + motivo.Trim());
+                    //html.Append("[" + Proceso.ToString() + "]. Fecha/Hora " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToLongTimeString() + ". " + Mensaje.Trim());
                     if (EstructuraJSON.Trim() != "")
                     {
-                        html.Append("[" + sMessage.ToString() +
-                                    "]. Fecha/Hora " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString() + ". " +
-                                    motivo.Trim() + ". JSON= " + EstructuraJSON.Trim());
+                        html.Append("[" + Proceso.ToString() +
+                                    "]. Fecha: " + DateTime.Now.ToString("dd/MM/yyyy HHmmss") + ". " +
+                                    Mensaje.Trim() + ". JSON= " + EstructuraJSON.Trim());
                     }
                     else
                     {
-                        html.Append("[" + sMessage.ToString() + "]. Fecha/Hora " + DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString() + ". " + motivo.Trim());
+                        html.Append("[" + Proceso.ToString() +
+                                    "]. Fecha: " + DateTime.Now.ToString("dd/MM/yyyy HHmmss") + ". " +
+                                    Mensaje.Trim());
                     }
 
                     html.Append(Environment.NewLine);
+
                     StreamWriter strStreamWriter = File.AppendText(FilePath);
                     strStreamWriter.Write(html.ToString());
                     strStreamWriter.Close();
+                }
 
-                    //Si la key indica grabar log en la base de datos y el mensaje tambien =================
-                    if (ConfigurationManager.AppSettings["RegistroBDLog"].ToString() == "SI" && GuardarEnBD == true)
-                    {
-                        LogInfoBD(NombreProceso, motivo, Referencia, EstructuraJSON);
-                    }
+                //Si la key indica grabar log en la base de datos y el mensaje tambien =================
+                if (ConfigurationManager.AppSettings["RegistroBDLog"].ToString() == "SI" && GuardarEnBD == true)
+                {
+                    LogInfoBD(NombreProceso, Mensaje, Referencia, EstructuraJSON);
                 }
             }
             catch (Exception e)
             {
-                LogInfo(e.Message, "Creación de Log.");
+                LogInfo(e.Message, "Error en Creación de Log.");
             }
         }
 
@@ -4805,7 +4833,7 @@ namespace WS_itec2
             }
         }
 
-        //Confirma Revisión en Woocomerce, genera el Envio en Enviame y retorna la etiqueta
+        //Confirma Revisión en Woocomerce, genera el Envio en Enviame, recupera la etiqueta ZPL y la manda a la cola de impresion
         private void ConfirmacionRevision()
         {
             try
@@ -4905,7 +4933,8 @@ namespace WS_itec2
 
                         request.AddParameter("application /json", body, ParameterType.RequestBody);
 
-                        LogInfo("ConfirmacionRevision", "Antes llamado API." + 
+                        LogInfo("ConfirmacionRevision", 
+                                                        "Antes llamado API." + 
                                                         " NumeroReferencia: "  + myData.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim() +
                                                         ", SDD: "               + myData.Tables[0].Rows[i]["FolioRel"].ToString().Trim() + 
                                                         ", RevisionId: "        + myData.Tables[0].Rows[i]["Folio"].ToString().Trim());                                                            
@@ -8330,13 +8359,20 @@ namespace WS_itec2
                 string result = "";
                 int EmpId;
                 string Ruta = "";
+                string Producto_o_Variante = ""; //indica si esta actualizando por ID de producto o ID de Variante
                 int Contador = 0;
                 int CantidadProductosEnvio = 0;
-                ActualizaStockBigCommerce Cabecera = new ActualizaStockBigCommerce();
-                Detalle_ActualizaStockBigCommerce Detalle = new Detalle_ActualizaStockBigCommerce();
+
+                ActualizaStockBigCommerceProducto CabeceraProducto = new ActualizaStockBigCommerceProducto();
+                ActualizaStockBigCommerceVariante CabeceraVariante = new ActualizaStockBigCommerceVariante();
+
+                Detalle_ActualizaStockBigCommerceProducto DetalleProducto = new Detalle_ActualizaStockBigCommerceProducto();
+                Detalle_ActualizaStockBigCommerceVariante DetalleVariante = new Detalle_ActualizaStockBigCommerceVariante();
 
                 Int32.TryParse(stEmpÌd, out EmpId);
                 DataSet myDataSet = new DataSet();
+
+                string body2 = "";
 
                 //Enviar a BigCommerce saldo de articulos en getpoint ----
 
@@ -8365,8 +8401,10 @@ namespace WS_itec2
                             //LogInfo(NombreProceso, "Contador: " + Contador.ToString());
                             //LogInfo(NombreProceso, "cantidadproductosenvio: " + CantidadProductosEnvio.ToString());
 
-                            //Si cambia de Ruta o llego a la cantidad de productos por llamado ejecuta API Bigcommerce
-                            if (myDataUpd.Tables[0].Rows[i]["URL_EndPoint"].ToString().Trim() != Ruta.Trim() || Contador >= CantidadProductosEnvio)
+                            //Si cambia de Ruta o llego a la cantidad de productos por llamado ejecuta API Bigcommerce o cambio el indicador de Producto o Variante
+                            if (myDataUpd.Tables[0].Rows[i]["URL_EndPoint"].ToString().Trim() != Ruta.Trim() || 
+                                Contador >= CantidadProductosEnvio ||
+                                myDataUpd.Tables[0].Rows[i]["Texto3Det"].ToString().Trim() != Producto_o_Variante)
                             {                                
                                 //Si no es la primera vez que entra al ciclo realiza llamado -----
                                 if (Ruta.Trim() != "")
@@ -8406,7 +8444,14 @@ namespace WS_itec2
                                     //carga parametro con el JSON de productos ---
 
                                     //Crea body para llamado con estructura de variable cargada ---
-                                    var body2 = JsonConvert.SerializeObject(Cabecera);
+                                    if (Producto_o_Variante == "BIGCOMM_Product")
+                                    {
+                                        body2 = JsonConvert.SerializeObject(CabeceraProducto);
+                                    }
+                                    else
+                                    {
+                                        body2 = JsonConvert.SerializeObject(CabeceraVariante);
+                                    }                                    
 
                                     //LogInfo(NombreProceso, "Llama API actualiza stock Articulo " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
 
@@ -8419,7 +8464,14 @@ namespace WS_itec2
                                     //Si finalizó OK --------------------------
                                     if (CodigoRetorno.Equals(HttpStatusCode.OK))
                                     {
-                                        LogInfo(NombreProceso, "Actualizacion Stock OK. Corte control fila: " + (i + 1).ToString());
+                                        if (Producto_o_Variante == "BIGCOMM_Product")
+                                        {
+                                            LogInfo(NombreProceso, "Actualiza Stock OK. (Product) Fila: " + (i + 1).ToString());
+                                        }
+                                        else
+                                        {
+                                            LogInfo(NombreProceso, "Actualiza Stock OK. (Variant) Fila: " + (i + 1).ToString());
+                                        }                                        
 
                                         //Actualiza estado de L_IntegraConfirmaciones, deja en estado traspasado (Estado = 2) ------
                                         result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmaciones(int.Parse(myDataUpd.Tables[0].Rows[i]["IntId"].ToString()));
@@ -8454,23 +8506,37 @@ namespace WS_itec2
                                 } //FIN si no es primera vez que entra al ciclo
 
                                 //Inicializa variables
-                                Cabecera = new ActualizaStockBigCommerce();
-                                Cabecera.reason = "Actualizacion Stock Ultimate Fitness";
+                                CabeceraProducto = new ActualizaStockBigCommerceProducto();
+                                CabeceraVariante = new ActualizaStockBigCommerceVariante();
+
+                                CabeceraProducto.reason = "Actualizacion Stock Ultimate Fitness";
+                                CabeceraVariante.reason = "Actualizacion Stock Ultimate Fitness";
 
                                 Ruta = myDataUpd.Tables[0].Rows[i]["URL_EndPoint"].ToString().Trim();
+                                Producto_o_Variante = myDataUpd.Tables[0].Rows[i]["Texto3Det"].ToString().Trim();
+
                                 Contador = 0;
                                 
                             } //FIN si cambia de ruta o llega a la cantidad de productos por llamado
 
                             //Agrega producto al listado 
-                            Detalle = new Detalle_ActualizaStockBigCommerce();
+                            DetalleProducto = new Detalle_ActualizaStockBigCommerceProducto();
+                            DetalleVariante = new Detalle_ActualizaStockBigCommerceVariante();
 
-                            Detalle.location_id = 1;
+                            //Producto
+                            DetalleProducto.location_id = 1;
                             //Detalle.sku = myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim();
-                            Detalle.product_id = int.Parse(myDataUpd.Tables[0].Rows[i]["ItemReferencia"].ToString().Trim());
-                            Detalle.quantity = int.Parse(myDataUpd.Tables[0].Rows[i]["CantidadEntera"].ToString());
+                            DetalleProducto.product_id = int.Parse(myDataUpd.Tables[0].Rows[i]["ItemReferencia"].ToString().Trim());
+                            DetalleProducto.quantity = int.Parse(myDataUpd.Tables[0].Rows[i]["CantidadEntera"].ToString());
 
-                            Cabecera.items.Add(Detalle);
+                            //Variante
+                            DetalleVariante.location_id = 1;
+                            //Detalle.sku = myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim();
+                            DetalleVariante.variant_id = int.Parse(myDataUpd.Tables[0].Rows[i]["ItemReferencia"].ToString().Trim());
+                            DetalleVariante.quantity = int.Parse(myDataUpd.Tables[0].Rows[i]["CantidadEntera"].ToString());
+
+                            CabeceraProducto.items.Add(DetalleProducto);
+                            CabeceraVariante.items.Add(DetalleVariante);
 
                             //LogInfo(NombreProceso, "fila:" + i.ToString() + ". Agrega Articulo: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
 
@@ -8521,7 +8587,14 @@ namespace WS_itec2
                             //carga parametro con el JSON de productos ---
 
                             //Crea body para llamado con estructura de variable cargada ---
-                            var body2 = JsonConvert.SerializeObject(Cabecera);
+                            if (Producto_o_Variante == "BIGCOMM_Product")
+                            {
+                                body2 = JsonConvert.SerializeObject(CabeceraProducto);
+                            }
+                            else
+                            {
+                                body2 = JsonConvert.SerializeObject(CabeceraVariante);
+                            }
 
                             //LogInfo(NombreProceso, "Llama API actualiza stock Articulo " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
 
