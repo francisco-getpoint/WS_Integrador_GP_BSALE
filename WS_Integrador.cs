@@ -8466,11 +8466,11 @@ namespace WS_itec2
                                     {
                                         if (Producto_o_Variante == "BIGCOMM_Product")
                                         {
-                                            LogInfo(NombreProceso, "Actualiza Stock OK. (Product) Fila: " + (i + 1).ToString());
+                                            LogInfo(NombreProceso, "Actualiza OK. (Product) Fila: " + (i + 1).ToString());
                                         }
                                         else
                                         {
-                                            LogInfo(NombreProceso, "Actualiza Stock OK. (Variant) Fila: " + (i + 1).ToString());
+                                            LogInfo(NombreProceso, "Actualiza OK. (Variant) Fila: " + (i + 1).ToString());
                                         }                                        
 
                                         //Actualiza estado de L_IntegraConfirmaciones, deja en estado traspasado (Estado = 2) ------
