@@ -322,15 +322,14 @@ namespace WS_Integrador.Classes.model
             }
             return result;
         }
-        public static string ActualizaEstadoERP(string BD_GETPOINT, string recepcion, string colapickid , string guideRef)
+        public static string ActualizaEstadoERP(string RecepcionId, string ColaPickId , string guideRef)
         {
-
-            //OleDbConnection myConnection = DB.getOleDbConnection2(BD_GETPOINT);
             OleDbConnection myConnection = DB.getConnection();
             OleDbCommand myCommand = new OleDbCommand("sp_upd_CambEstado_INT", myConnection);
+
             myCommand.CommandType = CommandType.StoredProcedure;
-            myCommand.Parameters.Add("@RecepcionId", OleDbType.Numeric).Value = recepcion;
-            myCommand.Parameters.Add("@ColaPickId", OleDbType.Numeric).Value = colapickid;
+            myCommand.Parameters.Add("@RecepcionId", OleDbType.Numeric).Value = RecepcionId;
+            myCommand.Parameters.Add("@ColaPickId", OleDbType.Numeric).Value = ColaPickId;
             myCommand.Parameters.Add("@URLRef", OleDbType.VarChar,250).Value = guideRef;
 
             string result;
@@ -354,6 +353,40 @@ namespace WS_Integrador.Classes.model
             }
             return result;
         }
+
+        public static string ActualizaEstadoRevision(string ColaPickId, int RevisionId,string guideRef, int Estado)
+        {
+            OleDbConnection myConnection = DB.getConnection();
+            OleDbCommand myCommand = new OleDbCommand("sp_upd_CambiaEstadoRevision", myConnection);
+
+            myCommand.CommandType = CommandType.StoredProcedure;
+            myCommand.Parameters.Add("@ColaPickId", OleDbType.Numeric).Value = ColaPickId;
+            myCommand.Parameters.Add("@RevisionId", OleDbType.Numeric).Value = RevisionId;
+            myCommand.Parameters.Add("@URLRef", OleDbType.VarChar, 250).Value = guideRef;
+            myCommand.Parameters.Add("@Estado", OleDbType.Integer).Value = Estado;
+
+            string result;
+            try
+            {
+
+                myCommand.CommandTimeout = 99999;
+                myConnection.Open();
+                myCommand.ExecuteNonQuery();
+                result = "OK";
+            }
+            catch (Exception ex)
+            {
+                result = "Error";
+                throw new Exception(ex.Message.ToString());
+            }
+            finally
+            {
+                myConnection.Close();
+                myConnection.Dispose();
+            }
+            return result;
+        }
+
         public static string ActualizaEstadoWebhook(string id, string estado, decimal document)
         {
 
@@ -387,14 +420,12 @@ namespace WS_Integrador.Classes.model
             }
             return result;
         }
-        public static string ActualizaPickingRechazado(string BD_GETPOINT, string colapickid)
+        public static string ActualizaPickingRechazado(string ColaPickId)
         {
-
-            //OleDbConnection myConnection = DB.getOleDbConnection2(BD_GETPOINT);
             OleDbConnection myConnection = DB.getConnection();
             OleDbCommand myCommand = new OleDbCommand("sp_upd_CambEstadoPicking_INT", myConnection);
             myCommand.CommandType = CommandType.StoredProcedure;
-            myCommand.Parameters.Add("@ColaPickId	", OleDbType.Numeric).Value = colapickid;
+            myCommand.Parameters.Add("@ColaPickId	", OleDbType.Numeric).Value = ColaPickId;
 
             string result;
             try
@@ -645,6 +676,35 @@ namespace WS_Integrador.Classes.model
                 OleDbDataAdapter myAdapter = new OleDbDataAdapter();
                 myAdapter.SelectCommand = myCommand;
                 myAdapter.Fill(myDataSet, "sp_sel_SDD_Confirmadas");
+            }
+            catch (Exception e)
+            {
+                throw new Exception(e.Message);
+            }
+            finally
+            {
+                myConnection.Close();
+                myConnection.Dispose();
+            }
+            return myDataSet;
+        }
+
+        public static DataSet ShowList_SDD_ConfirmadasPorRevision()
+        {
+            DataSet myDataSet = new DataSet();
+            OleDbConnection myConnection = DB.getOleDbConnection();
+
+            OleDbCommand myCommand = new OleDbCommand("sp_sel_SDD_ConfirmadasPorRevision", myConnection);
+            myCommand.CommandType = CommandType.StoredProcedure;
+
+            try
+            {
+                myCommand.CommandTimeout = 9999;
+                myConnection.Open();
+                //myCommand.ExecuteNonQuery();
+                OleDbDataAdapter myAdapter = new OleDbDataAdapter();
+                myAdapter.SelectCommand = myCommand;
+                myAdapter.Fill(myDataSet, "sp_sel_SDD_ConfirmadasPorRevision");
             }
             catch (Exception e)
             {

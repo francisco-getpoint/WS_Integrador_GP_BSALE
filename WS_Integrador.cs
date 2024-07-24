@@ -34,11 +34,6 @@ namespace WS_itec2
     {
         //private IContainer components = null;
         private Timer tmServicio1 = null;
-        //private int minutos = 0;
-        //private int minutosSF = 0;
-        //private string mensaje2;
-        //private string gBD_GETPOINT;
-        //private int gEmpId;
 
         #region ClasesParaEjecutarAPIs
         public class Integracion
@@ -556,19 +551,6 @@ namespace WS_itec2
             public decimal stock_quantity { get; set; }
         }
 
-        //clase para BigCommerce
-
-        //{
-        //    "reason": "Monthly arrival delivered.",
-        //    "items": [
-        //                {
-        //                    "location_id": 1,
-        //                    "sku": "RE-130",
-        //                    "quantity": 10
-        //                }
-        //            ]
-        //}
-
         [DataContract]
         public class ActualizaStockBigCommerceProducto
         {
@@ -750,6 +732,12 @@ namespace WS_itec2
                     ConfirmaSDD_WMS_to_BSALE();
                 }
 
+                if (ConfigurationManager.AppSettings["Activa_Confirma_Despacho"].ToString() == "True")
+                {
+                    // 6 Informa confirmaciones de despachos de mercaderia de WMS a BSALE para NOVAPET
+                    ConfirmaSDD_WMS_to_BSALE2();
+                }
+
                 if (ConfigurationManager.AppSettings["Activa_ConfirmacionPickingEComm"].ToString() == "True")
                 {
                     // 7 Informa a Woocommerce el termino de Picking
@@ -828,7 +816,7 @@ namespace WS_itec2
                 if (ConfigurationManager.AppSettings["Activa_GuiaTrasladoINET"].ToString() == "True")
                 {
                     // 19 Servicio WEB integracion Solicitud INET - SIWMS_WSSolicitud 
-                    SolicitudINET("GUIA_TRASLADO_INET");
+                    SolicitudTrasladoINET("GUIA_TRASLADO_INET");
                 }
 
                 if (ConfigurationManager.AppSettings["Activa_WebHook_INGRESO_COMPRAS"].ToString() == "True")
@@ -877,7 +865,13 @@ namespace WS_itec2
                 {
                     // 27 Actualiza stocks en BigCommerce - actualizacion masiva por SKU
                     ActualizaStockEComm_BigCommerce("ActualizaStockEComm_BigCommerce");
-                }                
+                }
+
+                if (ConfigurationManager.AppSettings["Activa_LeeIdProducto_BigCommerce"].ToString() == "True")
+                {
+                    // 28 Lee Id asociado al Producto en BigCommerce, lo guarda en Getpoint 
+                    LeeIdProducto_BigCommerce("LeeIdProducto_BigCommerce");
+                }
 
                 this.tmServicio1.Start();
             }
@@ -1041,6 +1035,8 @@ namespace WS_itec2
         //Informa las solicitudes de despacho confirmadas en WMS a BSALE
         private void ConfirmaSDD_WMS_to_BSALE()
         {
+            string NombreProceso = "ConfirmaSDD_a_BSALE";
+
             string stNumeroReferencia = "",
                    ColaPickId = "",
                    mensaje1 = "",
@@ -1075,12 +1071,16 @@ namespace WS_itec2
             var model_DATA = new Object();
             var DATA2 = "";
 
+            LogInfo(NombreProceso, "antes de llamar ShowList_SDD");
+
             DataSet myDataSet = WS_Integrador.Classes.model.InfF_Generador.ShowList_SDD();
 
             if (myDataSet.Tables[0].Rows.Count <= 0)
             {
                 return; //Si no hay SDD que procesar sale del proceso
             }
+
+            LogInfo(NombreProceso, "ShowList_SDD, filas: " + myDataSet.Tables[0].Rows.Count.ToString());
 
             List<detailsConsumo> details = new List<detailsConsumo>();
 
@@ -1106,30 +1106,31 @@ namespace WS_itec2
                     try
                     {
                         mensaje1 = "Ejecutara Integración SDD confirmada, NumeroReferencia: " + stNumeroReferencia;
-                        LogInfo("RecepcionDoctoLegalSDD", mensaje1);
+                        LogInfo(NombreProceso, mensaje1);
 
                         HttpResponseMessage messge = client2.PostAsync(URL, content2).Result;
 
                         if (messge.IsSuccessStatusCode)
                         {
-                            mensaje1 = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HHmmss") + " Integración SDD confirmada Exitosa";
-                            LogInfo("RecepcionDoctoLegalSDD", mensaje1);
+                            mensaje1 = "Integración SDD confirmada Exitosa";
+                            LogInfo(NombreProceso, mensaje1);
 
                             string respuesta = messge.Content.ReadAsStringAsync().Result;
                             RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
                             
                             string guideRef = respGuia.guide.href.Trim();
 
-                            result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("", 
-                                                                                                   "0",
+                            //marca L_ColaPicking, dato3 como "Enviado"
+                            result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("0",
                                                                                                    ColaPickId, 
                                                                                                    guideRef);
                         }
                         else
                         {
                             string respuesta = messge.Content.ReadAsStringAsync().Result;
-                            result = WS_Integrador.Classes.model.InfF_Generador.ActualizaPickingRechazado("", 
-                                                                                                          ColaPickId);
+
+                            //marca L_ColaPicking, Dato3 como 'Enviado Con Error'
+                            result = WS_Integrador.Classes.model.InfF_Generador.ActualizaPickingRechazado(ColaPickId);
 
                             //para guardar el error de BSALE -------
                             result2 = WS_Integrador.Classes.model.InfF_Generador.GuardaPickingErrorBSALE(ColaPickId, 
@@ -1141,8 +1142,8 @@ namespace WS_itec2
                                        ", ColaPicking: " + stColaPicking.Trim() +
                                        ", SolDespId: " + stSolDespId.Trim();
 
-                            LogInfo("RecepcionDoctoLegalSDD", mensaje1, true);
-                            LogInfo("RecepcionDoctoLegalSDD", "JSON: " + DATA2);
+                            LogInfo(NombreProceso, mensaje1, true);
+                            LogInfo(NombreProceso, "JSON: " + DATA2);
                         }
                         content2.Dispose();
                         client2.Dispose();
@@ -1190,6 +1191,7 @@ namespace WS_itec2
 
                 details = new List<detailsConsumo>();
 
+                //carga items de la SDD
                 for (int item = 0; item < myDataSet.Tables[0].Rows.Count; item++)
                 {
                     if (myDataSet.Tables[0].Rows[item]["NumeroReferencia"].ToString().Trim() == stNumeroReferencia)
@@ -1215,8 +1217,10 @@ namespace WS_itec2
                     details,
                     client = cliente,
                 };
-            } //FIN ciclo 
+            } 
+            //FIN ciclo SDR confirmadas
 
+            //procesa la ultima SDD --------------------
             DATA2 = JsonConvert.SerializeObject(model_DATA);
             //para llamado de ws
             URL = "https://api.bsale.cl/v1/shippings.json";
@@ -1233,21 +1237,22 @@ namespace WS_itec2
             try
             {
                 mensaje1 = "Ejecutara Integración SDD confirmada, NumeroReferencia: " + stNumeroReferencia;
-                LogInfo("RecepcionDoctoLegalSDD", mensaje1);
+                LogInfo(NombreProceso, mensaje1);
 
                 HttpResponseMessage messge = client.PostAsync(URL, content).Result;
 
                 if (messge.IsSuccessStatusCode)
                 {
                     mensaje1 = "Integración SDD confirmada Exitosa";
-                    LogInfo("RecepcionDoctoLegalSDD", mensaje1);
+                    LogInfo(NombreProceso, mensaje1);
 
                     string respuesta = messge.Content.ReadAsStringAsync().Result;
                     RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
 
                     string guideRef = respGuia.guide.href.Trim();
-                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("", 
-                                                                                           "0", 
+
+                    //marca L_ColaPicking, dato3 como "Enviado"
+                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("0", 
                                                                                            ColaPickId, 
                                                                                            guideRef);
                 }
@@ -1257,8 +1262,9 @@ namespace WS_itec2
                     result2 = "";
 
                     string respuesta = messge.Content.ReadAsStringAsync().Result;
-                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaPickingRechazado("",
-                                                                                                  ColaPickId);
+
+                    //marca L_ColaPicking, Dato3 como 'Enviado Con Error'
+                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaPickingRechazado(ColaPickId);
 
                     //para guardar el error de BSALE -------
                     result2 = WS_Integrador.Classes.model.InfF_Generador.GuardaPickingErrorBSALE(ColaPickId,
@@ -1269,17 +1275,282 @@ namespace WS_itec2
                                ", ColaPicking: " + stColaPicking.Trim() +
                                ", SolDespId: " + stSolDespId.Trim();
 
-                    LogInfo("RecepcionDoctoLegalSDD", mensaje1, true);
-                    LogInfo("RecepcionDoctoLegalSDD", "JSON Enviado:" + DATA2.Trim(), true);
+                    LogInfo(NombreProceso, mensaje1, true);
+                    LogInfo(NombreProceso, "JSON Enviado:" + DATA2.Trim(), true);
                 }
+
                 content.Dispose();
                 client.Dispose();
             }
             catch (Exception ex1)
             {
                 string mensajeError = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HHmmss") + " Ocurrio el siguiente error" + ex1.Message;
-                // this.EscribeLog(mensaje1);
-                LogInfo("RecepcionDoctoLegalSDD", mensajeError, true);
+                LogInfo(NombreProceso, mensajeError, true);
+            }
+        }
+
+        //Informa las solicitudes de despacho confirmadas en WMS a BSALE, VERSION QUE CONFIRMA POR REVISION ------
+        private void ConfirmaSDD_WMS_to_BSALE2()
+        {
+            string NombreProceso = "ConfirmaSDD_a_BSALE2";
+
+            string stNumeroReferencia = "",
+                   ColaPickId = "",
+                   mensaje1 = "",
+                   stTipoReferencia = "",
+                   stColaPicking = "",
+                   stSolDespId = "";
+
+            string URL = "",
+                   result = "",
+                   result2 = "";
+
+            string documentTypeId = "",
+                   emissionDate = "",
+                   shippingTypeId = "",
+                   municipality = "",
+                   city = "",
+                   address = "",
+                   declareSii = "",
+                   recipient = "",
+                   code = "",
+                   activity = "",
+                   company = "",
+                   email = "";
+
+            int RevisionId = 0;
+
+            DateTime _date = DateTime.Parse(DateTime.Now.ToShortDateString());
+            Int32 unixTimestamp = (Int32)(_date.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+            int officeId = 1; //por defecto 
+            var model_DATA = new Object();
+            var DATA2 = "";
+
+            LogInfo(NombreProceso, "antes de llamar ShowList_SDD");
+
+            DataSet myDataSet = WS_Integrador.Classes.model.InfF_Generador.ShowList_SDD_ConfirmadasPorRevision();
+
+            if (myDataSet.Tables[0].Rows.Count <= 0)
+            {
+                return; //Si no hay SDD que procesar sale del proceso
+            }
+
+            LogInfo(NombreProceso, "Cantidad filas: " + myDataSet.Tables[0].Rows.Count.ToString());
+
+            List<detailsConsumo> details = new List<detailsConsumo>();
+
+            //Recorre SDD confirmadas -----------------------------------------
+            for (int i = 0; i < myDataSet.Tables[0].Rows.Count; i++)
+            {
+                //Cuando cambie de Numero Referencia envia confirmacion -----------------
+                if ((myDataSet.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim() != stNumeroReferencia) & (stNumeroReferencia != ""))
+                {
+                    DATA2 = JsonConvert.SerializeObject(model_DATA);
+                    //para llamado de ws
+                    URL = "https://api.bsale.cl/v1/shippings.json";
+                    System.Net.Http.HttpClient client2 = new System.Net.Http.HttpClient();
+                    client2.BaseAddress = new System.Uri(URL);
+                    client2.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+                    //Begin 2: Parametros para Header
+                    client2.DefaultRequestHeaders.TryAddWithoutValidation("Content-Type", "application/json");
+                    client2.DefaultRequestHeaders.TryAddWithoutValidation("access_token", ConfigurationManager.AppSettings["TokenBsale"].ToString());
+
+                    System.Net.Http.HttpContent content2 = new StringContent(DATA2, UTF8Encoding.UTF8, "application/json");
+
+                    try
+                    {
+                        mensaje1 = "Ejecutara Integración SDD confirmada, NumeroReferencia: " + stNumeroReferencia;
+                        LogInfo(NombreProceso, mensaje1);
+
+                        HttpResponseMessage messge = client2.PostAsync(URL, content2).Result;
+
+                        if (messge.IsSuccessStatusCode)
+                        {
+                            mensaje1 = "Integración SDD confirmada Exitosa";
+                            LogInfo(NombreProceso, mensaje1);
+
+                            string respuesta = messge.Content.ReadAsStringAsync().Result;
+                            RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
+
+                            string guideRef = respGuia.guide.href.Trim();
+
+                            //marca L_ColaPicking, dato3 como "Enviado"
+                            result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId,
+                                                                                                        RevisionId,
+                                                                                                        guideRef,
+                                                                                                        1);
+                        }
+                        else
+                        {
+                            string respuesta = messge.Content.ReadAsStringAsync().Result;
+
+                            //marca L_ColaPicking, Dato3 como 'Enviado Con Error'
+                            result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId, 
+                                                                                                        RevisionId,
+                                                                                                        "",
+                                                                                                        2);
+
+                            //para guardar el error de BSALE -------
+                            result2 = WS_Integrador.Classes.model.InfF_Generador.GuardaPickingErrorBSALE(ColaPickId,
+                                                                                                         respuesta.Trim());
+
+                            mensaje1 = "Integración SDD confirmada Fallida : " + respuesta.Trim() +
+                                       ". TipoReferencia: " + stTipoReferencia.Trim() +
+                                       ", NumeroReferencia: " + stNumeroReferencia.Trim() +
+                                       ", ColaPicking: " + stColaPicking.Trim() +
+                                       ", SolDespId: " + stSolDespId.Trim();
+
+                            LogInfo(NombreProceso, mensaje1, true);
+                            LogInfo(NombreProceso, "JSON: " + DATA2);
+                        }
+                        content2.Dispose();
+                        client2.Dispose();
+                    }
+                    catch (Exception ex1)
+                    {
+                        string mensajeError = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HHmmss") + " Ocurrio el siguiente error" + ex1.Message;
+                        // this.EscribeLog(mensaje1);
+                    }
+                }
+                //FIN Cuando cambie de Numero Referencia envia confirmacion -----------------
+
+                //Si cambio de SDD genera nuevo archivo
+                //if (stNumeroReferencia != "" /*(myDataSet.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim() != stNumeroReferencia) & (stNumeroReferencia != "")*/)
+
+                ColaPickId = myDataSet.Tables[0].Rows[i]["ColaPickId"].ToString().Trim();
+                RevisionId = int.Parse(myDataSet.Tables[0].Rows[i]["RevisionId"].ToString().Trim());
+                officeId = int.Parse(myDataSet.Tables[0].Rows[i]["officeId"].ToString().Trim());
+                documentTypeId = myDataSet.Tables[0].Rows[i]["documentTypeId"].ToString().Trim();
+                emissionDate = myDataSet.Tables[0].Rows[i]["emissionDate"].ToString().Trim();
+                shippingTypeId = myDataSet.Tables[0].Rows[i]["shippingTypeId"].ToString().Trim();
+                municipality = myDataSet.Tables[0].Rows[i]["municipality"].ToString().Trim();
+                city = myDataSet.Tables[0].Rows[i]["city"].ToString().Trim();
+                address = myDataSet.Tables[0].Rows[i]["address"].ToString().Trim();
+                declareSii = myDataSet.Tables[0].Rows[i]["declareSii"].ToString().Trim();
+                recipient = myDataSet.Tables[0].Rows[i]["recipient"].ToString().Trim();
+                code = myDataSet.Tables[0].Rows[i]["code"].ToString().Trim();
+                activity = myDataSet.Tables[0].Rows[i]["activity"].ToString().Trim();
+                company = myDataSet.Tables[0].Rows[i]["company"].ToString().Trim();
+                email = myDataSet.Tables[0].Rows[i]["email"].ToString().Trim();
+
+                var cliente = new
+                {
+                    code = code,
+                    municipality = municipality,
+                    activity = activity,
+                    company = company,
+                    city = city,
+                    email = email,
+                    address = address,
+                };
+
+                stNumeroReferencia = myDataSet.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim();
+                stTipoReferencia = myDataSet.Tables[0].Rows[i]["TipoReferencia"].ToString().Trim();
+                stColaPicking = myDataSet.Tables[0].Rows[i]["ColaPickId"].ToString().Trim();
+                stSolDespId = myDataSet.Tables[0].Rows[i]["SolDespId"].ToString().Trim();
+
+                details = new List<detailsConsumo>();
+
+                //carga items de la SDD
+                for (int item = 0; item < myDataSet.Tables[0].Rows.Count; item++)
+                {
+                    if (myDataSet.Tables[0].Rows[item]["NumeroReferencia"].ToString().Trim() == stNumeroReferencia)
+                    {
+                        detailsConsumo myDetalleSDD = new detailsConsumo();
+                        myDetalleSDD.quantity = int.Parse(myDataSet.Tables[0].Rows[item]["quantity"].ToString().Trim());
+                        myDetalleSDD.detailId = myDataSet.Tables[0].Rows[item]["detailId"].ToString().Trim();
+                        details.Add(myDetalleSDD);
+                    }
+                }
+
+                model_DATA = new
+                {
+                    documentTypeId = documentTypeId,
+                    officeId = officeId,
+                    emissionDate = unixTimestamp.ToString(),
+                    shippingTypeId = shippingTypeId,
+                    municipality = municipality,
+                    city = city,
+                    address = address,
+                    declareSii = declareSii,
+                    recipient = recipient,
+                    details,
+                    client = cliente,
+                };
+            }
+            //FIN ciclo SDD confirmadas
+
+            //procesa la ultima SDD --------------------
+            DATA2 = JsonConvert.SerializeObject(model_DATA);
+            //para llamado de ws
+            URL = "https://api.bsale.cl/v1/shippings.json";
+            System.Net.Http.HttpClient client = new System.Net.Http.HttpClient();
+            client.BaseAddress = new System.Uri(URL);
+            client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+            //Begin 2: Parametros para Header
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Content-Type", "application/json");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("access_token", ConfigurationManager.AppSettings["TokenBsale"].ToString());
+
+            System.Net.Http.HttpContent content = new StringContent(DATA2, UTF8Encoding.UTF8, "application/json");
+
+            try
+            {
+                mensaje1 = "Ejecutara Integración SDD confirmada, NumeroReferencia: " + stNumeroReferencia;
+                LogInfo(NombreProceso, mensaje1);
+
+                HttpResponseMessage messge = client.PostAsync(URL, content).Result;
+
+                if (messge.IsSuccessStatusCode)
+                {
+                    mensaje1 = "Integración SDD confirmada Exitosa";
+                    LogInfo(NombreProceso, mensaje1);
+
+                    string respuesta = messge.Content.ReadAsStringAsync().Result;
+                    RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
+
+                    string guideRef = respGuia.guide.href.Trim();
+
+                    //marca L_ColaPicking, dato3 como "Enviado"
+                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId,
+                                                                                                RevisionId,
+                                                                                                guideRef,
+                                                                                                1);
+                }
+                else
+                {
+                    result = "";
+                    result2 = "";
+
+                    string respuesta = messge.Content.ReadAsStringAsync().Result;
+
+                    //marca L_ColaPicking, Dato3 como 'Enviado Con Error'
+                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId, 
+                                                                                                RevisionId,
+                                                                                                "",
+                                                                                                2);
+
+                    //para guardar el error de BSALE -------
+                    result2 = WS_Integrador.Classes.model.InfF_Generador.GuardaPickingErrorBSALE(ColaPickId,
+                                                                                                 respuesta.Trim());
+                    mensaje1 = "Integración SDD confirmada Fallida: " + respuesta.Trim() +
+                               ". TipoReferencia: " + stTipoReferencia.Trim() +
+                               ", NumeroReferencia: " + stNumeroReferencia.Trim() +
+                               ", ColaPicking: " + stColaPicking.Trim() +
+                               ", SolDespId: " + stSolDespId.Trim();
+
+                    LogInfo(NombreProceso, mensaje1, true);
+                    LogInfo(NombreProceso, "JSON Enviado:" + DATA2.Trim(), true);
+                }
+
+                content.Dispose();
+                client.Dispose();
+            }
+            catch (Exception ex1)
+            {
+                string mensajeError = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HHmmss") + " Ocurrio el siguiente error" + ex1.Message;
+                LogInfo(NombreProceso, mensajeError, true);
             }
         }
 
@@ -1364,8 +1635,7 @@ namespace WS_itec2
                             LogInfo("RecepcionMercaderiaWMS_to_BSALE", mensaje1);
 
                             string respuesta = messge.Content.ReadAsStringAsync().Result;
-                            result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("", 
-                                                                                                   stIdDocto, 
+                            result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(stIdDocto, 
                                                                                                    "0", 
                                                                                                    "");
                         }
@@ -1441,7 +1711,7 @@ namespace WS_itec2
                     LogInfo("RecepcionMercaderiaWMS_to_BSALE", mensaje1);
 
                     string respuesta = messge.Content.ReadAsStringAsync().Result;
-                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("", stIdDocto, "0", "");
+                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(stIdDocto, "0", "");
 
                 }
                 else
@@ -1596,9 +1866,9 @@ namespace WS_itec2
                         }
                     }
 
-                    //----------------------------------------------------------------------------------------------------------------------------------------------
-                    //Si la ultima lectura a BSALE retornó datos sigue procesando, sino hace una PAUSA de 10 segundos a la espera que el servicio de BSale responda
-                    //----------------------------------------------------------------------------------------------------------------------------------------------
+                    //-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                    //Si la ultima lectura a BSALE retornó datos sigue procesando, sino hace una PAUSA de 3 segundos a la espera que el servicio de BSale responda en caso que se haya llegado al limite de llamados
+                    //-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
                     if (s.Trim() != "")
                     {
                         //Ciclo que recorre la pagina de Articulos -----
@@ -1607,6 +1877,13 @@ namespace WS_itec2
                             ContadorProductos = ContadorProductos + 1; //contador de productos padre leidos (no las variedades)
 
                             LogInfo("BSALE_ExtraeMaestraArticulos", "Procesando posicion: " + ContadorProductos.ToString() + " (offset:" + offset.ToString() + ", limit:" + limit.ToString() + ", item:" + i.ToString() + ")");
+
+                            //cada 7 registros hace una pausa de 0,3 segundos (para no saturar a BSale, que no soporta mas de 8 llamados a API por segundo)
+                            if (ContadorProductos % 7 == 0)
+                            {
+                                System.Threading.Thread.Sleep(300); // pausa de 0,3 segundos 
+                                LogInfo("BSALE_ExtraeMaestraArticulos", "Pausa 0,3 segundos posicion: " + ContadorProductos.ToString() + " (offset:" + offset.ToString() + ", limit:" + limit.ToString() + ", item:" + i.ToString() + ")");
+                            }
 
                             try
                             {
@@ -3055,7 +3332,7 @@ namespace WS_itec2
 
                                                     VariantsDetalle = JsonConvert.DeserializeObject<Variants>(valor);
 
-                                                    //state <> 55 debe insertar
+                                                    //state <> 55 debe insertar (items codigo DESPACHO tienen state 55, los excluye)
                                                     if (VariantsDetalle.state.ToString().Trim() != "55")
                                                     {
                                                         InsertaIntegracion = true;
@@ -3244,7 +3521,7 @@ namespace WS_itec2
 
                                                         VariantsDetalle = JsonConvert.DeserializeObject<Variants>(valor);
 
-                                                        //state <> 55 debe insertar
+                                                        //state <> 55 debe insertar (items codigo DESPACHO tienen state 55, los excluye)
                                                         if (VariantsDetalle.state.ToString().Trim() != "55")
                                                         {
                                                             InsertaIntegracion = true;
@@ -5417,7 +5694,7 @@ namespace WS_itec2
 
                                         //RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
                                         //string guideRef = respGuia.guide.href.Trim();
-                                        //result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("", "0", stIdDocto, guideRef);
+                                        //result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("0", stIdDocto, guideRef);
 
                                         //Actualiza estado de L_IntegraConfirmacionesDet, deja en estado Procesado OK (1)------
                                         result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmacionesDet(1,
@@ -5428,7 +5705,7 @@ namespace WS_itec2
                                     {
                                         string respuesta = messge.Content.ReadAsStringAsync().Result;
 
-                                        //result = WS_Integrador.Classes.model.InfF_Generador.ActualizaPickingRechazado("", stIdDocto);
+                                        //result = WS_Integrador.Classes.model.InfF_Generador.ActualizaPickingRechazado(stIdDocto);
                                         mensaje1 = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HHmmss") + "    Generando Traspaso fallido: " + respuesta.Trim();
                                         LogInfo("GeneraGuiaTrasladoBSale", mensaje1, true);
 
@@ -5660,7 +5937,7 @@ namespace WS_itec2
 
                                 //RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
                                 //string guideRef = respGuia.guide.href.Trim();
-                                //result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("", "0", stIdDocto, guideRef);
+                                //result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP("0", stIdDocto, guideRef);
 
                                 //Actualiza estado de L_IntegraConfirmacionesDet, deja en estado Procesado OK (1)------
                                 //result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmacionesDet(1,
@@ -5670,7 +5947,7 @@ namespace WS_itec2
                             else
                             {
                                 string respuesta = messge.Content.ReadAsStringAsync().Result;
-                                //result = WS_Integrador.Classes.model.InfF_Generador.ActualizaPickingRechazado("", stIdDocto);
+                                //result = WS_Integrador.Classes.model.InfF_Generador.ActualizaPickingRechazado(stIdDocto);
 
                                 mensaje1 = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HHmmss") + "    Generando Traspaso fallido: " + respuesta.Trim();
                                 LogInfo("", mensaje1);
@@ -7607,11 +7884,11 @@ namespace WS_itec2
         }
 
         // Servicio WEB integracion Solicitud INET - SIWMS_WSSolicitud --> NombreProceso = GUIA_TRASLADO_INET
-        private void SolicitudINET(string NombreProceso)
+        private void SolicitudTrasladoINET(string NombreProceso)
         {
             try
             {
-                LogInfo("SolicitudINET", "Inicio ejecucion");
+                LogInfo(NombreProceso, "Inicio ejecucion");
 
                 //para evitar error de seguridad en el llamado a la API ----------
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; //TLS 1.2
@@ -7845,7 +8122,7 @@ namespace WS_itec2
                                     //EJECUTA LLAMADO API ==========================
                                     IRestResponse response = client.Execute(request);
 
-                                    LogInfo("SolicitudINET", "Ejecuta API Solicitud INET: " + myData.Tables[0].Rows[i]["Folio"].ToString().Trim() +
+                                    LogInfo(NombreProceso, "Ejecuta API Solicitud INET: " + myData.Tables[0].Rows[i]["Folio"].ToString().Trim() +
                                                              ", IntId: " + myData.Tables[0].Rows[i]["IntId"].ToString().Trim() +
                                                              ". JSON: " + body.ToString());
 
@@ -7871,7 +8148,7 @@ namespace WS_itec2
                                                                                      rss["ProcesoRespuesta"]["Datos"][Res]["DATO"].ToString().Trim() + ".";
                                             }
 
-                                            LogInfo("SolicitudINET", "Integracion OK. " + Respuesta.Trim(), true);
+                                            LogInfo(NombreProceso, "Integracion OK. " + Respuesta.Trim(), true);
                                         }
 
                                         //Si retorno Con errores
@@ -7883,7 +8160,7 @@ namespace WS_itec2
                                                 Respuesta = Respuesta.Trim() + " " + rss["ProcesoRespuesta"]["Errores"][Res]["ErrorDescripcion"].ToString().Trim() + ".";
                                             }
 
-                                            LogInfo("SolicitudINET", "Error api ConfirmacionRecepcionINET para Folio: " + myData.Tables[0].Rows[i]["Folio"].ToString().Trim() +
+                                            LogInfo(NombreProceso, "Error api ConfirmacionRecepcionINET para Folio: " + myData.Tables[0].Rows[i]["Folio"].ToString().Trim() +
                                                                      "Error: " + Respuesta.Trim() + 
                                                                      ". JSON: " + body.ToString(), true);
 
@@ -7904,7 +8181,7 @@ namespace WS_itec2
                                             Respuesta = "";
                                         }
 
-                                        LogInfo("SolicitudINET", "Error api SolicitudDespachoINET para Folio: " +
+                                        LogInfo(NombreProceso, "Error api SolicitudDespachoINET para Folio: " +
                                                                  myData.Tables[0].Rows[i]["Folio"].ToString().Trim() + Respuesta.Trim() + 
                                                                  ". JSON: " + body.ToString(), true);
 
@@ -7922,12 +8199,11 @@ namespace WS_itec2
             }
             catch (Exception ex)
             {
-                LogInfo(ex.Message, "Error SolicitudDespachoINET", true);
+                LogInfo(NombreProceso, "ERROR: " + ex.Message, true);
             }
         }
 
-        //WEBHOOK CONFIRMACION SDR
-        //=====================================
+        //WEBHOOK CONFIRMACION SDR =====================================
         private void ConfirmacionIngresoWebHook(string NombreProceso)
         {
             try
@@ -8138,8 +8414,7 @@ namespace WS_itec2
             }
         }
 
-        //WEBHOOK CONFIRMACION SDD
-        //=====================================
+        //WEBHOOK CONFIRMACION SDD =====================================
         private void ConfirmacionSalidaWebHook(string NombreProceso)
         {
             try
@@ -8651,6 +8926,203 @@ namespace WS_itec2
             }
         }
 
+        //Lee Id asociado al Producto en BigCommerce, lo guarda en Getpoint 
+        private void LeeIdProducto_BigCommerce(string NombreProceso)
+        {
+            try
+            {
+                LogInfo(NombreProceso, "Inicio ejecucion proceso", true);
+
+                //agregar para evitar error de seguridad en el llamado a la API ----------
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; //TLS 1.2
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)768; //TLS 1.1 
+                System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12; // para error No se puede crear un canal seguro SSL/TLS
+
+                string stEmpÌd = ConfigurationManager.AppSettings["EmpId"].ToString();
+                string result = "";
+                int EmpId;
+                int Id_BigCommerce = 0;
+                string Tipo_BigCommerce = "";
+                string Sku_BigCommerce = "";
+                int pagina = 1;
+                string Continuar = "SI";
+
+                string Datos = "";
+                string SeparadorCampo = "¬"; //alt 170
+                string SeparadorLinea = "«"; //alt 174
+
+
+                Int32.TryParse(stEmpÌd, out EmpId);
+                DataSet myDataSet = new DataSet();
+
+                //Saca lista de productos de Bigcommerce ----
+
+                //----------------------------------------------------------------------------------------------------------------------------
+                // Carga tabla de L_IntegraConfirmaciones y L_IntegraConfirmacionesDet ruta API Obtener Productos de Bigcommerce -----
+                // Crea 1 cabecera y 1 detalle en blanco
+                // En el procedimiento tiene logica para sacar los datos cada cierta cantidad de minutos 
+
+                result = WS_Integrador.Classes.model.InfF_Generador.IntegraStockWMSToEcomm("LeeIdProducto_BigComm");
+
+                //Trae articulos para integracion con Item referencia ---------------
+                DataSet myDataUpd = WS_Integrador.Classes.model.InfF_Generador.ShowList_IntegraConfirmacionesJson(EmpId, "LeeIdProducto_BigComm");
+
+                if (myDataUpd.Tables.Count > 0)
+                {
+                    int i = 0;
+
+                    for (i = 0; i <= myDataUpd.Tables[0].Rows.Count - 1; i++)
+                    {
+                        // Ejecuta la API tantas veces hasta que no devuelve mas datos --------
+                        Continuar = "SI";
+
+                        while (Continuar == "SI")
+                        {
+                            //reemplaza el parametro PAGINA antes de llamar la API
+
+                            #region Carga URL de la API del cliente para enviar la confirmacion de la SDD 
+
+                            var client = new RestClient(myDataUpd.Tables[0].Rows[i]["URL_EndPoint"].ToString().Replace("{PAGINA}", pagina.ToString().Trim()).Trim());
+
+                            client.Timeout = -1;
+
+                            //Indica el metodo de llamado de la API ----
+                            var request = new RestRequest(Method.GET);
+                            switch (myDataUpd.Tables[0].Rows[i]["Metodo"].ToString().Trim())
+                            {
+                                case "GET":
+                                    request = new RestRequest(Method.GET); //consulta
+                                    break;
+                                case "POST":
+                                    request = new RestRequest(Method.POST); //crea
+                                    break;
+                                case "PUT":
+                                    request = new RestRequest(Method.PUT); //modifica
+                                    break;
+                            }
+
+                            //Trae informacion para headers segun el nombre proceso -------
+                            DataSet myDataH2 = WS_Integrador.Classes.model.InfF_Generador.ShowList_IntegraConfirmacionesJson_Headers(EmpId, myDataUpd.Tables[0].Rows[i]["NombreProceso"].ToString().Trim(), 2);
+
+                            //Carga listado de headers (atributo y valor) necesarios para realizar el llamado a la api ----------------
+                            if (myDataH2.Tables.Count > 0)
+                            {
+                                for (int k = 0; k <= myDataH2.Tables[0].Rows.Count - 1; k++)
+                                {
+                                    //agrega key y su valor -----------
+                                    request.AddHeader(myDataH2.Tables[0].Rows[k]["myKey"].ToString().Trim(), myDataH2.Tables[0].Rows[k]["myValue"].ToString().Trim());
+                                }
+                            }
+                            #endregion
+
+                            //no requiere envio de estructura en Body, se envia vacio
+                            var body = @"";
+
+                            //LogInfo(NombreProceso, "Llama API actualiza stock Articulo " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim());
+
+                            request.AddParameter("application/json", body, ParameterType.RequestBody);
+
+                            //Ejecuta llamado de la API --------------
+                            IRestResponse response = client.Execute(request);
+                            HttpStatusCode CodigoRetorno = response.StatusCode;
+
+                            //Si finalizó OK --------------------------
+                            if (CodigoRetorno.Equals(HttpStatusCode.OK))
+                            {
+                                if (response.Content != "")
+                                {
+                                    JObject rss = JObject.Parse(response.Content);
+
+                                    //recorre los datos que retorna -----
+                                    if (rss["data"] != null)
+                                    {
+                                        for (int d = 0; d < rss["data"].Count(); d++)
+                                        {
+                                            //recupera id producto de bigcommerce
+
+                                            //si es producto lo recupera directo
+                                            if (rss["data"][d]["sku"].ToString() != null || rss["data"][d]["sku"].ToString() != "")
+                                            {
+                                                Tipo_BigCommerce = "BIGCOMM_Product";
+                                                Id_BigCommerce = int.Parse(rss["data"][d]["id"].ToString());
+                                                Sku_BigCommerce = rss["data"][d]["sku"].ToString();
+                                            }
+                                            else
+                                            {
+                                                //no es producto, recorre las variantes
+                                                for (int v = 0; v < rss["data"][d]["variants"].Count(); v++) 
+                                                {
+                                                    Tipo_BigCommerce = "BIGCOMM_Variant";
+                                                    Id_BigCommerce = int.Parse(rss["data"][d]["variants"][v]["id"].ToString());
+                                                    Sku_BigCommerce = rss["data"][d]["variants"][v]["sku"].ToString();
+                                                }
+                                            }
+
+                                            LogInfo(NombreProceso, Tipo_BigCommerce.Trim() + SeparadorCampo + Id_BigCommerce.ToString().Trim() + SeparadorCampo + Sku_BigCommerce + ". Id producto: " + rss["data"][d]["id"].ToString());
+                                        }
+
+                                        //Actualiza estado de L_IntegraConfirmaciones, deja en estado traspasado (Estado = 2) ------
+                                        result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmaciones(int.Parse(myDataUpd.Tables[0].Rows[i]["IntId"].ToString()));
+
+                                        //Actualiza estado de L_IntegraConfirmacionesDet, deja en estado Procesado OK (Estado = 1)------
+                                        result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmacionesDet(1,
+                                                                                                                              int.Parse(myDataUpd.Tables[0].Rows[i]["IntId"].ToString()),
+                                                                                                                              int.Parse(myDataUpd.Tables[0].Rows[i]["IdDet"].ToString()));
+                                    }
+                                    else //no trae datos
+                                    {
+                                        Continuar = "NO";
+
+                                        LogInfo(NombreProceso, "Error actualiza Stock: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim() + " (json no retorna datos)");
+
+                                        //Actualiza estado de L_IntegraConfirmacionesDet, deja en estado Procesado con Error (Estado = 2)------
+                                        result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmacionesDet(2,
+                                                                                                                              int.Parse(myDataUpd.Tables[0].Rows[i]["IntId"].ToString()),
+                                                                                                                              int.Parse(myDataUpd.Tables[0].Rows[i]["IdDet"].ToString()));
+
+                                    }
+
+                                }
+                                else
+                                {
+                                    Continuar = "NO";
+
+                                    //JObject rss = JObject.Parse(responseStock.Content);
+                                    LogInfo(NombreProceso, "Error actualiza Stock: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim() + " (json no retorna datos)");
+
+                                    //Actualiza estado de L_IntegraConfirmacionesDet, deja en estado Procesado con Error (Estado = 2)------
+                                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmacionesDet(2,
+                                                                                                                          int.Parse(myDataUpd.Tables[0].Rows[i]["IntId"].ToString()),
+                                                                                                                          int.Parse(myDataUpd.Tables[0].Rows[i]["IdDet"].ToString()));
+                                }
+                            }
+                            else
+                            {
+                                Continuar = "NO";
+
+                                LogInfo(NombreProceso, "Error actualiza Stock: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim() + " (json no retorna datos). Status: " + CodigoRetorno.ToString());
+
+                                //Actualiza estado de L_IntegraConfirmacionesDet, deja en estado Procesado con Error (Estado = 2)------
+                                result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmacionesDet(2,
+                                                                                                                      int.Parse(myDataUpd.Tables[0].Rows[i]["IntId"].ToString()),
+                                                                                                                      int.Parse(myDataUpd.Tables[0].Rows[i]["IdDet"].ToString()));
+                            }
+
+                            pagina = pagina + 1;
+
+                        } //FIN ciclo lectura API mientras Continuar="SI", hasta que no queden datos
+
+                    } //FIN ciclo for
+                }
+
+                LogInfo(NombreProceso, "FIN ejecucion proceso");
+            }
+            catch (Exception ex)
+            {
+                LogInfo(NombreProceso, "Error: " + ex.Message, true);
+            }
+        }
+
         private void LeeArchivo(int EmpId, string BD_GETPOINT)
         {
             // Introducir aquí el código de usuario para inicializar la página
@@ -8986,7 +9458,7 @@ namespace WS_itec2
                     if ((myDataSet.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim() != stNumeroReferencia) & (stNumeroReferencia != ""))
                     {
                         stIdDocto = myDataSet.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim();
-                        result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(BD_GETPOINT, stIdDocto, "", "");
+                        result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(stIdDocto, "", "");
 
                         //genera archivo y lo copia al FTP
                         pie = "";
@@ -9062,8 +9534,7 @@ namespace WS_itec2
 
                 pie = "";
 
-                result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(BD_GETPOINT,
-                                                                                       stIdDocto,
+                result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(stIdDocto,
                                                                                        "",
                                                                                        "");
 
@@ -9238,7 +9709,7 @@ namespace WS_itec2
                     if ((myDataSet.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim() != stNumeroReferencia) & (stNumeroReferencia != ""))
                     {
                         stIdDocto = myDataSet.Tables[0].Rows[i]["NumeroReferencia"].ToString().Trim();
-                        result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(BD_GETPOINT, stIdDocto, "", "");
+                        result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(stIdDocto, "", "");
 
                         //genera archivo y lo copia al FTP
                         pie = "";
@@ -9325,7 +9796,7 @@ namespace WS_itec2
                 }
                 pie = "";
 
-                result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(BD_GETPOINT, stIdDocto, "", "");
+                result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoERP(stIdDocto, "", "");
 
                 Filename = "SDD_" + stNumeroReferencia + "_" + DateTime.Now.ToString("yyMMddHHmmss") + ".csv";
                 FilePath = ConfigurationManager.AppSettings["PathLogITEC"].ToString() + "\\" + Filename;

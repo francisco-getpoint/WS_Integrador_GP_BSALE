@@ -44,7 +44,7 @@
 
             string Empresa;
 
-            Empresa = "MUNDOSALUD";
+            Empresa = "NOVAPET";
 
             this.serviceInstaller1.DisplayName = "GP Integrador_GP_BSALE " + Empresa.Trim();
             this.serviceInstaller1.ServiceName = "WS_Integrador_GP_BSALE_" + Empresa.Trim();
