@@ -943,6 +943,65 @@ namespace WS_Integrador.Classes.model
             return result;
         }
 
+        public static string BuscaIdBigCommerce(string NombreProceso)
+        {
+            OleDbConnection myConnection = DB.getConnection();
+            OleDbCommand myCommand = new OleDbCommand("sp_proc_INT_BuscaIdBigCommerce", myConnection);
+            myCommand.CommandType = CommandType.StoredProcedure;
+
+            myCommand.Parameters.Add("@NombreProceso", OleDbType.VarChar, 20).Value = NombreProceso;
+
+            string result;
+            try
+            {
+                myCommand.CommandTimeout = 99999;
+                myConnection.Open();
+                myCommand.ExecuteNonQuery();
+                result = "OK";
+            }
+            catch (Exception ex)
+            {
+                result = "Error";
+                throw new Exception(ex.Message.ToString());
+            }
+            finally
+            {
+                myConnection.Close();
+                myConnection.Dispose();
+            }
+            return result;
+        }
+
+        public static string GuardaIdBigCommerce(string NombreProceso, string Datos)
+        {
+            OleDbConnection myConnection = DB.getConnection();
+            OleDbCommand myCommand = new OleDbCommand("sp_in_INT_GuardaIdBigCommerce", myConnection);
+            myCommand.CommandType = CommandType.StoredProcedure;
+
+            myCommand.Parameters.Add("@NombreProceso", OleDbType.VarChar, 20).Value = NombreProceso;
+            myCommand.Parameters.Add("@Datos", OleDbType.VarChar).Value = Datos;
+
+            string result;
+            try
+            {
+                myCommand.CommandTimeout = 99999;
+                myConnection.Open();
+                myCommand.ExecuteNonQuery();
+                result = "OK";
+            }
+            catch (Exception ex)
+            {
+                result = "Error";
+                throw new Exception(ex.Message.ToString());
+            }
+            finally
+            {
+                myConnection.Close();
+                myConnection.Dispose();
+            }
+            return result;
+        }
+
         //Marca estado de cabecera de integracion es estado procesado
         public static string ActualizaIntegraConfirmaciones(int Intid)
         {

@@ -867,10 +867,10 @@ namespace WS_itec2
                     ActualizaStockEComm_BigCommerce("ActualizaStockEComm_BigCommerce");
                 }
 
-                if (ConfigurationManager.AppSettings["Activa_LeeIdProducto_BigCommerce"].ToString() == "True")
+                if (ConfigurationManager.AppSettings["Activa_BuscaIdProducto_BigCommerce"].ToString() == "True")
                 {
                     // 28 Lee Id asociado al Producto en BigCommerce, lo guarda en Getpoint 
-                    LeeIdProducto_BigCommerce("LeeIdProducto_BigCommerce");
+                    LeeIdProducto_BigCommerce("BUSCA_ID_BigComm");
                 }
 
                 this.tmServicio1.Start();
@@ -8955,22 +8955,24 @@ namespace WS_itec2
                 Int32.TryParse(stEmpÌd, out EmpId);
                 DataSet myDataSet = new DataSet();
 
-                //Saca lista de productos de Bigcommerce ----
+                //Saca lista completa de productos de Bigcommerce ----
 
                 //----------------------------------------------------------------------------------------------------------------------------
-                // Carga tabla de L_IntegraConfirmaciones y L_IntegraConfirmacionesDet ruta API Obtener Productos de Bigcommerce -----
-                // Crea 1 cabecera y 1 detalle en blanco
-                // En el procedimiento tiene logica para sacar los datos cada cierta cantidad de minutos 
+                // Paso 1:  - Carga tabla de L_IntegraConfirmaciones y L_IntegraConfirmacionesDet ruta API Obtener Productos de Bigcommerce -----
+                //          - Crea 1 cabecera y 1 detalle en blanco
+                //          - En el procedimiento tiene logica para sacar los datos cada cierta cantidad de minutos 
 
-                result = WS_Integrador.Classes.model.InfF_Generador.IntegraStockWMSToEcomm("LeeIdProducto_BigComm");
+                result = WS_Integrador.Classes.model.InfF_Generador.BuscaIdBigCommerce(NombreProceso);
 
-                //Trae articulos para integracion con Item referencia ---------------
-                DataSet myDataUpd = WS_Integrador.Classes.model.InfF_Generador.ShowList_IntegraConfirmacionesJson(EmpId, "LeeIdProducto_BigComm");
+                //Paso 2:   - Trae ruta para ejecutar API que retorna listado ---------------
+                DataSet myDataUpd = WS_Integrador.Classes.model.InfF_Generador.ShowList_IntegraConfirmacionesJson(EmpId, NombreProceso);
 
+                //si trae tablas
                 if (myDataUpd.Tables.Count > 0)
                 {
                     int i = 0;
 
+                    //si trae datos
                     for (i = 0; i <= myDataUpd.Tables[0].Rows.Count - 1; i++)
                     {
                         // Ejecuta la API tantas veces hasta que no devuelve mas datos --------
@@ -8978,7 +8980,9 @@ namespace WS_itec2
 
                         while (Continuar == "SI")
                         {
-                            //reemplaza el parametro PAGINA antes de llamar la API
+                            //reemplaza el parametro {PAGINA} dentro de la ruta antes de ejecutar la API
+
+                            LogInfo(NombreProceso, "llamado API BigCommerce: " + myDataUpd.Tables[0].Rows[i]["URL_EndPoint"].ToString().Replace("{PAGINA}", pagina.ToString().Trim()).Trim());
 
                             #region Carga URL de la API del cliente para enviar la confirmacion de la SDD 
 
@@ -9036,16 +9040,37 @@ namespace WS_itec2
                                     //recorre los datos que retorna -----
                                     if (rss["data"] != null)
                                     {
+                                        Datos = "";
+                                        Continuar = "NO";
+
                                         for (int d = 0; d < rss["data"].Count(); d++)
                                         {
+                                            Continuar = "SI";
+
                                             //recupera id producto de bigcommerce
 
                                             //si es producto lo recupera directo
-                                            if (rss["data"][d]["sku"].ToString() != null || rss["data"][d]["sku"].ToString() != "")
+                                            if (rss["data"][d]["sku"].ToString() != null && rss["data"][d]["sku"].ToString() != "")
                                             {
                                                 Tipo_BigCommerce = "BIGCOMM_Product";
                                                 Id_BigCommerce = int.Parse(rss["data"][d]["id"].ToString());
                                                 Sku_BigCommerce = rss["data"][d]["sku"].ToString();
+
+                                                LogInfo(NombreProceso, Tipo_BigCommerce.Trim() + SeparadorCampo + Id_BigCommerce.ToString().Trim() + SeparadorCampo + Sku_BigCommerce + ". Id producto: " + rss["data"][d]["id"].ToString() + SeparadorCampo + "Linea:" + d.ToString());
+
+                                                //==============================================================
+                                                //Si ya tiene lineas previas agrega caracter separador de Lineas
+                                                if (Datos.Trim() != "")
+                                                {
+                                                    Datos = Datos.Trim() + SeparadorLinea.Trim();
+                                                }
+
+                                                Datos = Datos.Trim() +
+                                                        Tipo_BigCommerce.Trim() + SeparadorCampo.Trim() +
+                                                        Id_BigCommerce.ToString().Trim() + SeparadorCampo.Trim() +
+                                                        Sku_BigCommerce.Trim();
+
+                                                //==============================================================
                                             }
                                             else
                                             {
@@ -9055,11 +9080,28 @@ namespace WS_itec2
                                                     Tipo_BigCommerce = "BIGCOMM_Variant";
                                                     Id_BigCommerce = int.Parse(rss["data"][d]["variants"][v]["id"].ToString());
                                                     Sku_BigCommerce = rss["data"][d]["variants"][v]["sku"].ToString();
+
+                                                    LogInfo(NombreProceso, Tipo_BigCommerce.Trim() + SeparadorCampo + Id_BigCommerce.ToString().Trim() + SeparadorCampo + Sku_BigCommerce + ". Id producto: " + rss["data"][d]["id"].ToString() + SeparadorCampo + "Linea:" + d.ToString());
+
+                                                    //==============================================================
+                                                    //Si ya tiene lineas previas agrega caracter separador de Lineas
+                                                    if (Datos.Trim() != "")
+                                                    {
+                                                        Datos = Datos.Trim() + SeparadorLinea.Trim();
+                                                    }
+
+                                                    Datos = Datos.Trim() +
+                                                            Tipo_BigCommerce.Trim() + SeparadorCampo.Trim() +
+                                                            Id_BigCommerce.ToString().Trim() + SeparadorCampo.Trim() +
+                                                            Sku_BigCommerce.Trim();
+
+                                                    //==============================================================
                                                 }
                                             }
-
-                                            LogInfo(NombreProceso, Tipo_BigCommerce.Trim() + SeparadorCampo + Id_BigCommerce.ToString().Trim() + SeparadorCampo + Sku_BigCommerce + ". Id producto: " + rss["data"][d]["id"].ToString());
                                         }
+
+                                        //Envia los id concatenados para actualizar los productos -----------------------------------
+                                        result = WS_Integrador.Classes.model.InfF_Generador.GuardaIdBigCommerce(NombreProceso, Datos);
 
                                         //Actualiza estado de L_IntegraConfirmaciones, deja en estado traspasado (Estado = 2) ------
                                         result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmaciones(int.Parse(myDataUpd.Tables[0].Rows[i]["IntId"].ToString()));
@@ -9073,7 +9115,7 @@ namespace WS_itec2
                                     {
                                         Continuar = "NO";
 
-                                        LogInfo(NombreProceso, "Error actualiza Stock: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim() + " (json no retorna datos)");
+                                        LogInfo(NombreProceso, "Error leer producto BigCommerce: " + myDataUpd.Tables[0].Rows[i]["CodigoArticulo"].ToString().Trim() + " (json no retorna datos)");
 
                                         //Actualiza estado de L_IntegraConfirmacionesDet, deja en estado Procesado con Error (Estado = 2)------
                                         result = WS_Integrador.Classes.model.InfF_Generador.ActualizaIntegraConfirmacionesDet(2,
