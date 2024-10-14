@@ -7883,7 +7883,7 @@ namespace WS_itec2
             }
         }
 
-        // Servicio WEB integracion Solicitud INET - SIWMS_WSSolicitud --> NombreProceso = GUIA_TRASLADO_INET
+        // Servicio WEB integracion Solicitud INET - SIWMS_WSSolicitud --> NombreProceso = GUIA_TRASLADO_INET 
         private void SolicitudTrasladoINET(string NombreProceso)
         {
             try
