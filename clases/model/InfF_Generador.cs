@@ -354,7 +354,7 @@ namespace WS_Integrador.Classes.model
             return result;
         }
 
-        public static string ActualizaEstadoRevision(string ColaPickId, int RevisionId,string guideRef, int Estado)
+        public static string ActualizaEstadoRevision(string ColaPickId, int RevisionId,string guideRef, int Estado, string MensajeError = "")
         {
             OleDbConnection myConnection = DB.getConnection();
             OleDbCommand myCommand = new OleDbCommand("sp_upd_CambiaEstadoRevision", myConnection);
@@ -364,6 +364,7 @@ namespace WS_Integrador.Classes.model
             myCommand.Parameters.Add("@RevisionId", OleDbType.Numeric).Value = RevisionId;
             myCommand.Parameters.Add("@URLRef", OleDbType.VarChar, 250).Value = guideRef;
             myCommand.Parameters.Add("@Estado", OleDbType.Integer).Value = Estado;
+            myCommand.Parameters.Add("@MensajeError", OleDbType.VarChar, 250).Value = MensajeError;
 
             string result;
             try

@@ -1292,7 +1292,8 @@ namespace WS_itec2
         //Informa las solicitudes de despacho confirmadas en WMS a BSALE, VERSION QUE CONFIRMA POR REVISION ------
         private void ConfirmaSDD_WMS_to_BSALE2()
         {
-            string NombreProceso = "ConfirmaSDD_a_BSALE2";
+            //string NombreProceso = "ConfirmaSDD_a_BSALE2";
+            string NombreProceso = "ConfirmaREV_a_BSALE";
 
             string stNumeroReferencia = "",
                    ColaPickId = "",
@@ -1326,7 +1327,7 @@ namespace WS_itec2
             var model_DATA = new Object();
             var DATA2 = "";
 
-            LogInfo(NombreProceso, "antes de llamar ShowList_SDD");
+            LogInfo(NombreProceso, "antes de llamar Revisiones por confirmar");
 
             DataSet myDataSet = WS_Integrador.Classes.model.InfF_Generador.ShowList_SDD_ConfirmadasPorRevision();
 
@@ -1357,60 +1358,87 @@ namespace WS_itec2
                     client2.DefaultRequestHeaders.TryAddWithoutValidation("access_token", ConfigurationManager.AppSettings["TokenBsale"].ToString());
 
                     System.Net.Http.HttpContent content2 = new StringContent(DATA2, UTF8Encoding.UTF8, "application/json");
+                    HttpResponseMessage messge = new HttpResponseMessage();
 
                     try
                     {
-                        mensaje1 = "Ejecutara Integración SDD confirmada, NumeroReferencia: " + stNumeroReferencia;
+                        string mensajeError = "";
+
+                        mensaje1 = "Ejecuta confirmacion Revision, NumeroReferencia: " + stNumeroReferencia;
                         LogInfo(NombreProceso, mensaje1);
 
-                        HttpResponseMessage messge = client2.PostAsync(URL, content2).Result;
-
-                        if (messge.IsSuccessStatusCode)
+                        try //control de error del llamado a BSALE
                         {
-                            mensaje1 = "Integración SDD confirmada Exitosa";
-                            LogInfo(NombreProceso, mensaje1);
+                            //HttpResponseMessage messge = client2.PostAsync(URL, content2).Result;
+                            messge = client2.PostAsync(URL, content2).Result;
+                        }
+                        catch (Exception ex1)
+                        {
+                            mensajeError = "Error llamado BSALE: " + ex1.Message;
 
-                            string respuesta = messge.Content.ReadAsStringAsync().Result;
-                            RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
+                            LogInfo(NombreProceso, mensajeError, true);
 
-                            string guideRef = respGuia.guide.href.Trim();
-
-                            //marca L_ColaPicking, dato3 como "Enviado"
+                            //marca L_ColaPicking y L_RevisionPick, Dato3 como 'Enviado Con Error'
                             result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId,
                                                                                                         RevisionId,
-                                                                                                        guideRef,
-                                                                                                        1);
-                        }
-                        else
-                        {
-                            string respuesta = messge.Content.ReadAsStringAsync().Result;
-
-                            //marca L_ColaPicking, Dato3 como 'Enviado Con Error'
-                            result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId, 
-                                                                                                        RevisionId,
                                                                                                         "",
-                                                                                                        2);
-
-                            //para guardar el error de BSALE -------
-                            result2 = WS_Integrador.Classes.model.InfF_Generador.GuardaPickingErrorBSALE(ColaPickId,
-                                                                                                         respuesta.Trim());
-
-                            mensaje1 = "Integración SDD confirmada Fallida : " + respuesta.Trim() +
-                                       ". TipoReferencia: " + stTipoReferencia.Trim() +
-                                       ", NumeroReferencia: " + stNumeroReferencia.Trim() +
-                                       ", ColaPicking: " + stColaPicking.Trim() +
-                                       ", SolDespId: " + stSolDespId.Trim();
-
-                            LogInfo(NombreProceso, mensaje1, true);
-                            LogInfo(NombreProceso, "JSON: " + DATA2);
+                                                                                                        2,
+                                                                                                        mensajeError.Trim());
                         }
+
+                        //Si no hay error en el llamado continua -------
+                        if (mensajeError.Trim() == "")
+                        {
+                            if (messge.IsSuccessStatusCode)
+                            {
+                                mensaje1 = "Confirmacion Revision Exitosa";
+                                LogInfo(NombreProceso, mensaje1);
+
+                                string respuesta = messge.Content.ReadAsStringAsync().Result;
+                                RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
+
+                                string guideRef = respGuia.guide.href.Trim();
+
+                                //marca L_ColaPicking y L_RevisionPick, dato3 como "Enviado"
+                                result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId,
+                                                                                                            RevisionId,
+                                                                                                            guideRef,
+                                                                                                            1);
+                            }
+                            else
+                            {
+                                string respuesta = messge.Content.ReadAsStringAsync().Result;
+
+                                //marca L_ColaPicking y L_RevisionPick, Dato3 como 'Enviado Con Error'
+                                result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId,
+                                                                                                            RevisionId,
+                                                                                                            "",
+                                                                                                            2,
+                                                                                                            respuesta.Trim());
+
+                                //para guardar el error de BSALE -------
+                                //result2 = WS_Integrador.Classes.model.InfF_Generador.GuardaPickingErrorBSALE(ColaPickId,
+                                //                                                                             respuesta.Trim());
+
+                                mensaje1 = "Confirmacion Revision Fallida : " + respuesta.Trim() +
+                                           ". TipoReferencia: " + stTipoReferencia.Trim() +
+                                           ", NumeroReferencia: " + stNumeroReferencia.Trim() +
+                                           ", ColaPicking: " + stColaPicking.Trim() +
+                                           ", SolDespId: " + stSolDespId.Trim() +
+                                           ", RevisionId: " + RevisionId.ToString().Trim();
+
+                                LogInfo(NombreProceso, mensaje1, true);
+                                LogInfo(NombreProceso, "JSON: " + DATA2);
+                            }
+                        } //FIN Si no hay error en el lamado continua
+
                         content2.Dispose();
                         client2.Dispose();
                     }
                     catch (Exception ex1)
                     {
-                        string mensajeError = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HHmmss") + " Ocurrio el siguiente error" + ex1.Message;
-                        // this.EscribeLog(mensaje1);
+                        string mensajeError = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss:fff") + ". Ocurrio el siguiente error: " + ex1.Message;
+                        LogInfo(NombreProceso, mensajeError, true);
                     }
                 }
                 //FIN Cuando cambie de Numero Referencia envia confirmacion -----------------
@@ -1458,6 +1486,7 @@ namespace WS_itec2
                     if (myDataSet.Tables[0].Rows[item]["NumeroReferencia"].ToString().Trim() == stNumeroReferencia)
                     {
                         detailsConsumo myDetalleSDD = new detailsConsumo();
+
                         myDetalleSDD.quantity = int.Parse(myDataSet.Tables[0].Rows[item]["quantity"].ToString().Trim());
                         myDetalleSDD.detailId = myDataSet.Tables[0].Rows[item]["detailId"].ToString().Trim();
                         details.Add(myDetalleSDD);
@@ -1479,9 +1508,9 @@ namespace WS_itec2
                     client = cliente,
                 };
             }
-            //FIN ciclo SDD confirmadas
+            //FIN ciclo Revisiones finalizadas
 
-            //procesa la ultima SDD --------------------
+            //procesa la ultima Revision --------------------
             DATA2 = JsonConvert.SerializeObject(model_DATA);
             //para llamado de ws
             URL = "https://api.bsale.cl/v1/shippings.json";
@@ -1494,62 +1523,88 @@ namespace WS_itec2
             client.DefaultRequestHeaders.TryAddWithoutValidation("access_token", ConfigurationManager.AppSettings["TokenBsale"].ToString());
 
             System.Net.Http.HttpContent content = new StringContent(DATA2, UTF8Encoding.UTF8, "application/json");
+            HttpResponseMessage messge2 = new HttpResponseMessage();
 
             try
             {
-                mensaje1 = "Ejecutara Integración SDD confirmada, NumeroReferencia: " + stNumeroReferencia;
+                string mensajeError = "";
+
+                mensaje1 = "Ejecuta confirmacion Revision, NumeroReferencia: " + stNumeroReferencia;
                 LogInfo(NombreProceso, mensaje1);
 
-                HttpResponseMessage messge = client.PostAsync(URL, content).Result;
-
-                if (messge.IsSuccessStatusCode)
+                try
                 {
-                    mensaje1 = "Integración SDD confirmada Exitosa";
-                    LogInfo(NombreProceso, mensaje1);
+                    //HttpResponseMessage messge = client.PostAsync(URL, content).Result;
+                    messge2 = client.PostAsync(URL, content).Result;
+                }
+                catch (Exception ex1)
+                {
+                    mensajeError = "Error llamado BSALE: " + ex1.Message;
 
-                    string respuesta = messge.Content.ReadAsStringAsync().Result;
-                    RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
+                    LogInfo(NombreProceso, mensajeError, true);
 
-                    string guideRef = respGuia.guide.href.Trim();
-
-                    //marca L_ColaPicking, dato3 como "Enviado"
+                    //marca L_ColaPicking y L_RevisionPick, Dato3 como 'Enviado Con Error'
                     result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId,
                                                                                                 RevisionId,
-                                                                                                guideRef,
-                                                                                                1);
-                }
-                else
-                {
-                    result = "";
-                    result2 = "";
-
-                    string respuesta = messge.Content.ReadAsStringAsync().Result;
-
-                    //marca L_ColaPicking, Dato3 como 'Enviado Con Error'
-                    result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId, 
-                                                                                                RevisionId,
                                                                                                 "",
-                                                                                                2);
-
-                    //para guardar el error de BSALE -------
-                    result2 = WS_Integrador.Classes.model.InfF_Generador.GuardaPickingErrorBSALE(ColaPickId,
-                                                                                                 respuesta.Trim());
-                    mensaje1 = "Integración SDD confirmada Fallida: " + respuesta.Trim() +
-                               ". TipoReferencia: " + stTipoReferencia.Trim() +
-                               ", NumeroReferencia: " + stNumeroReferencia.Trim() +
-                               ", ColaPicking: " + stColaPicking.Trim() +
-                               ", SolDespId: " + stSolDespId.Trim();
-
-                    LogInfo(NombreProceso, mensaje1, true);
-                    LogInfo(NombreProceso, "JSON Enviado:" + DATA2.Trim(), true);
+                                                                                                2,
+                                                                                                mensajeError.Trim());
                 }
+
+                //Si no hay error en el llamado continua -------
+                if (mensajeError.Trim() == "")
+                {
+                    if (messge2.IsSuccessStatusCode)
+                    {
+                        mensaje1 = "Confirmacion Revision Exitosa";
+                        LogInfo(NombreProceso, mensaje1);
+
+                        string respuesta = messge2.Content.ReadAsStringAsync().Result;
+                        RespGuiaIntegracion respGuia = JsonConvert.DeserializeObject<RespGuiaIntegracion>(respuesta);
+
+                        string guideRef = respGuia.guide.href.Trim();
+
+                        //marca L_ColaPicking, dato3 como "Enviado"
+                        result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId,
+                                                                                                    RevisionId,
+                                                                                                    guideRef,
+                                                                                                    1);
+                    }
+                    else
+                    {
+                        result = "";
+                        result2 = "";
+
+                        string respuesta = messge2.Content.ReadAsStringAsync().Result;
+
+                        //marca L_ColaPicking, Dato3 como 'Enviado Con Error'
+                        result = WS_Integrador.Classes.model.InfF_Generador.ActualizaEstadoRevision(ColaPickId,
+                                                                                                    RevisionId,
+                                                                                                    "",
+                                                                                                    2,
+                                                                                                    respuesta.Trim());
+
+                        //para guardar el error de BSALE -------
+                        //result2 = WS_Integrador.Classes.model.InfF_Generador.GuardaPickingErrorBSALE(ColaPickId,
+                        //                                                                             respuesta.Trim());
+                        mensaje1 = "Confirmacion Revision Fallida: " + respuesta.Trim() +
+                                   ". TipoReferencia: " + stTipoReferencia.Trim() +
+                                   ", NumeroReferencia: " + stNumeroReferencia.Trim() +
+                                   ", ColaPicking: " + stColaPicking.Trim() +
+                                   ", SolDespId: " + stSolDespId.Trim() +
+                                   ", Revision: " + RevisionId.ToString().Trim();
+
+                        LogInfo(NombreProceso, mensaje1, true);
+                        LogInfo(NombreProceso, "JSON Enviado:" + DATA2.Trim(), true);
+                    }
+                } //FIN Si no hay error en el llamado continua -------
 
                 content.Dispose();
                 client.Dispose();
             }
             catch (Exception ex1)
             {
-                string mensajeError = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HHmmss") + " Ocurrio el siguiente error" + ex1.Message;
+                string mensajeError = "Fecha: " + DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss:fff") + ". Ocurrio el siguiente error: " + ex1.Message;
                 LogInfo(NombreProceso, mensajeError, true);
             }
         }
@@ -4550,13 +4605,13 @@ namespace WS_itec2
                     if (EstructuraJSON.Trim() != "")
                     {
                         html.Append("[" + Proceso.ToString() +
-                                    "]. Fecha: " + DateTime.Now.ToString("dd/MM/yyyy HHmmss") + ". " +
+                                    "]. Fecha: " + DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss:fff") + ". " +
                                     Mensaje.Trim() + ". JSON= " + EstructuraJSON.Trim());
                     }
                     else
                     {
                         html.Append("[" + Proceso.ToString() +
-                                    "]. Fecha: " + DateTime.Now.ToString("dd/MM/yyyy HHmmss") + ". " +
+                                    "]. Fecha: " + DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss:fff") + ". " +
                                     Mensaje.Trim());
                     }
 
